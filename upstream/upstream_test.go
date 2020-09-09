@@ -187,6 +187,98 @@ func (suite *ListSuite) TestHealthcheck() {
 	}))
 }
 
+func (suite *ListSuite) TestReconcile() {
+	l, err := upstream.NewList(
+		[]upstream.Backend{
+			mockBackend("one"),
+			mockBackend("two"),
+			mockBackend("three"),
+		},
+		upstream.WithLowHighScores(-3, 3),
+		upstream.WithInitialScore(1),
+		upstream.WithScoreDeltas(-1, 1),
+		upstream.WithHealthcheckInterval(time.Hour),
+	)
+	suite.Require().NoError(err)
+
+	defer l.Shutdown()
+
+	backend, err := l.Pick()
+	suite.Assert().Equal(mockBackend("one"), backend)
+	suite.Assert().NoError(err)
+
+	l.Reconcile([]upstream.Backend{
+		mockBackend("one"),
+		mockBackend("two"),
+		mockBackend("three"),
+	})
+
+	backend, err = l.Pick()
+	suite.Assert().Equal(mockBackend("two"), backend)
+	suite.Assert().NoError(err)
+
+	l.Reconcile([]upstream.Backend{
+		mockBackend("one"),
+		mockBackend("two"),
+		mockBackend("four"),
+	})
+
+	backend, err = l.Pick()
+	suite.Assert().Equal(mockBackend("four"), backend)
+	suite.Assert().NoError(err)
+
+	l.Reconcile([]upstream.Backend{
+		mockBackend("five"),
+		mockBackend("six"),
+		mockBackend("four"),
+	})
+
+	backend, err = l.Pick()
+	suite.Assert().Equal(mockBackend("four"), backend)
+	suite.Assert().NoError(err)
+
+	backend, err = l.Pick()
+	suite.Assert().Equal(mockBackend("five"), backend)
+	suite.Assert().NoError(err)
+
+	backend, err = l.Pick()
+	suite.Assert().Equal(mockBackend("six"), backend)
+	suite.Assert().NoError(err)
+
+	l.Down(mockBackend("four")) // score == 2
+	l.Down(mockBackend("four")) // score == 1
+	l.Down(mockBackend("four")) // score == 0
+	l.Down(mockBackend("four")) // score == -1
+
+	backend, err = l.Pick()
+	suite.Assert().Equal(mockBackend("five"), backend)
+	suite.Assert().NoError(err)
+
+	backend, err = l.Pick()
+	suite.Assert().Equal(mockBackend("six"), backend)
+	suite.Assert().NoError(err)
+
+	l.Reconcile([]upstream.Backend{
+		mockBackend("five"),
+		mockBackend("six"),
+		mockBackend("four"),
+	})
+
+	backend, err = l.Pick()
+	suite.Assert().Equal(mockBackend("five"), backend)
+	suite.Assert().NoError(err)
+
+	backend, err = l.Pick()
+	suite.Assert().Equal(mockBackend("six"), backend)
+	suite.Assert().NoError(err)
+
+	l.Reconcile(nil)
+
+	backend, err = l.Pick()
+	suite.Assert().Nil(backend)
+	suite.Assert().EqualError(err, "no upstreams available")
+}
+
 func TestListSuite(t *testing.T) {
 	suite.Run(t, new(ListSuite))
 }
