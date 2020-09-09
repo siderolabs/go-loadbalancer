@@ -7,6 +7,7 @@ package loadbalancer
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 
@@ -25,6 +26,8 @@ import (
 // Usage: call Run() to start lb and wait for shutdown, call Close() to shutdown lb.
 type TCP struct {
 	tcpproxy.Proxy
+
+	routes map[string]*upstream.List
 }
 
 type lbUpstream string
@@ -76,6 +79,10 @@ func (target *lbTarget) HandleConn(conn net.Conn) {
 // TCP automatically does background health checks for the upstreams and picks only healthy
 // ones. Healthcheck is simple Dial attempt.
 func (t *TCP) AddRoute(ipPort string, upstreamAddrs []string, options ...upstream.ListOption) error {
+	if t.routes == nil {
+		t.routes = make(map[string]*upstream.List)
+	}
+
 	upstreams := make([]upstream.Backend, len(upstreamAddrs))
 	for i := range upstreams {
 		upstreams[i] = lbUpstream(upstreamAddrs[i])
@@ -86,7 +93,30 @@ func (t *TCP) AddRoute(ipPort string, upstreamAddrs []string, options ...upstrea
 		return err
 	}
 
+	t.routes[ipPort] = list
+
 	t.Proxy.AddRoute(ipPort, &lbTarget{list: list})
+
+	return nil
+}
+
+// ReconcileRoute updates the list of upstreamAddrs for the specified route (ipPort).
+func (t *TCP) ReconcileRoute(ipPort string, upstreamAddrs []string) error {
+	if t.routes == nil {
+		t.routes = make(map[string]*upstream.List)
+	}
+
+	list := t.routes[ipPort]
+	if list == nil {
+		return fmt.Errorf("handler not registered for %q", ipPort)
+	}
+
+	upstreams := make([]upstream.Backend, len(upstreamAddrs))
+	for i := range upstreams {
+		upstreams[i] = lbUpstream(upstreamAddrs[i])
+	}
+
+	list.Reconcile(upstreams)
 
 	return nil
 }

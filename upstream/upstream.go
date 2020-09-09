@@ -159,6 +159,39 @@ func NewList(upstreams []Backend, options ...ListOption) (*List, error) {
 	return list, nil
 }
 
+// Reconcile the list of backends with passed list.
+//
+// Any new backends are added with initial score, score is untouched
+// for backends which haven't changed their score.
+func (list *List) Reconcile(upstreams []Backend) {
+	newUpstreams := make(map[Backend]struct{}, len(upstreams))
+
+	for _, upstream := range upstreams {
+		newUpstreams[upstream] = struct{}{}
+	}
+
+	list.mu.Lock()
+	defer list.mu.Unlock()
+
+	for i := 0; i < len(list.nodes); i++ {
+		if _, exists := newUpstreams[list.nodes[i].backend]; exists {
+			delete(newUpstreams, list.nodes[i].backend)
+
+			continue
+		}
+
+		list.nodes = append(list.nodes[:i], list.nodes[i+1:]...)
+		i--
+	}
+
+	for upstream := range newUpstreams {
+		list.nodes = append(list.nodes, node{
+			backend: upstream,
+			score:   list.initialScore,
+		})
+	}
+}
+
 // Shutdown stops healthchecks.
 func (list *List) Shutdown() {
 	list.healthCtxCancel()

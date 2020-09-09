@@ -1,12 +1,12 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2020-09-01T20:34:11Z by kres ee90a80-dirty.
+# Generated on 2020-09-09T15:36:30Z by kres 7e146df-dirty.
 
 style: github
 template: CHANGELOG.tpl.md
 info:
   title: CHANGELOG
-  repository_url: https://github.com/talos-systems/talos
+  repository_url: https://github.com/talos-systems/go-loadbalancer
 options:
   commits:
     # filters:
