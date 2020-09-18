@@ -149,6 +149,8 @@ func (suite *TCPSuite) TestReconcile() {
 		no, err := strconv.ParseInt(string(id), 10, 32)
 		suite.Require().NoError(err)
 
+		suite.Assert().EqualValues(no, pivot+(i+pivot)%(upstreamCount-pivot))
+
 		suite.Assert().Less(no, int64(upstreamCount))
 		suite.Assert().GreaterOrEqual(no, int64(pivot))
 		upstreamsUsed[no]++
