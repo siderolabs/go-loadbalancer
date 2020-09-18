@@ -184,7 +184,13 @@ func (list *List) Reconcile(upstreams []Backend) {
 		i--
 	}
 
-	for upstream := range newUpstreams {
+	// make insert order predictable by going over the list once again,
+	// as iterating over the map might lead to unpredictable order
+	for _, upstream := range upstreams {
+		if _, ok := newUpstreams[upstream]; !ok {
+			continue
+		}
+
 		list.nodes = append(list.nodes, node{
 			backend: upstream,
 			score:   list.initialScore,

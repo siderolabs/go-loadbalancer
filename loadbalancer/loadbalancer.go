@@ -27,17 +27,22 @@ import (
 type TCP struct {
 	tcpproxy.Proxy
 
+	Logger *log.Logger
+
 	routes map[string]*upstream.List
 }
 
-type lbUpstream string
+type lbUpstream struct {
+	upstream string
+	logger   *log.Logger
+}
 
 func (upstream lbUpstream) HealthCheck(ctx context.Context) error {
 	d := net.Dialer{}
 
-	c, err := d.DialContext(ctx, "tcp", string(upstream))
+	c, err := d.DialContext(ctx, "tcp", upstream.upstream)
 	if err != nil {
-		log.Printf("healthcheck failed for %q: %s", string(upstream), err)
+		upstream.logger.Printf("healthcheck failed for %q: %s", upstream.upstream, err)
 
 		return err
 	}
@@ -46,27 +51,28 @@ func (upstream lbUpstream) HealthCheck(ctx context.Context) error {
 }
 
 type lbTarget struct {
-	list *upstream.List
+	list   *upstream.List
+	logger *log.Logger
 }
 
 func (target *lbTarget) HandleConn(conn net.Conn) {
 	upstreamBackend, err := target.list.Pick()
 	if err != nil {
-		log.Printf("no upstreams available, closing connection from %s", conn.RemoteAddr())
+		target.logger.Printf("no upstreams available, closing connection from %s", conn.RemoteAddr())
 		conn.Close() //nolint: errcheck
 
 		return
 	}
 
-	upstreamAddr := upstreamBackend.(lbUpstream) //nolint: errcheck
+	upstream := upstreamBackend.(lbUpstream) //nolint: errcheck
 
-	log.Printf("proxying connection %s -> %s", conn.RemoteAddr(), string(upstreamAddr))
+	target.logger.Printf("proxying connection %s -> %s", conn.RemoteAddr(), upstream.upstream)
 
-	upstreamTarget := tcpproxy.To(string(upstreamAddr))
+	upstreamTarget := tcpproxy.To(upstream.upstream)
 	upstreamTarget.OnDialError = func(src net.Conn, dstDialErr error) {
 		src.Close() //nolint: errcheck
 
-		log.Printf("error dialing upstream %s: %s", string(upstreamAddr), dstDialErr)
+		target.logger.Printf("error dialing upstream %s: %s", upstream.upstream, dstDialErr)
 
 		target.list.Down(upstreamBackend)
 	}
@@ -79,13 +85,20 @@ func (target *lbTarget) HandleConn(conn net.Conn) {
 // TCP automatically does background health checks for the upstreams and picks only healthy
 // ones. Healthcheck is simple Dial attempt.
 func (t *TCP) AddRoute(ipPort string, upstreamAddrs []string, options ...upstream.ListOption) error {
+	if t.Logger == nil {
+		t.Logger = log.New(log.Writer(), "", log.Flags())
+	}
+
 	if t.routes == nil {
 		t.routes = make(map[string]*upstream.List)
 	}
 
 	upstreams := make([]upstream.Backend, len(upstreamAddrs))
 	for i := range upstreams {
-		upstreams[i] = lbUpstream(upstreamAddrs[i])
+		upstreams[i] = lbUpstream{
+			upstream: upstreamAddrs[i],
+			logger:   t.Logger,
+		}
 	}
 
 	list, err := upstream.NewList(upstreams, options...)
@@ -95,7 +108,10 @@ func (t *TCP) AddRoute(ipPort string, upstreamAddrs []string, options ...upstrea
 
 	t.routes[ipPort] = list
 
-	t.Proxy.AddRoute(ipPort, &lbTarget{list: list})
+	t.Proxy.AddRoute(ipPort, &lbTarget{
+		list:   list,
+		logger: t.Logger,
+	})
 
 	return nil
 }
@@ -113,7 +129,10 @@ func (t *TCP) ReconcileRoute(ipPort string, upstreamAddrs []string) error {
 
 	upstreams := make([]upstream.Backend, len(upstreamAddrs))
 	for i := range upstreams {
-		upstreams[i] = lbUpstream(upstreamAddrs[i])
+		upstreams[i] = lbUpstream{
+			upstream: upstreamAddrs[i],
+			logger:   t.Logger,
+		}
 	}
 
 	list.Reconcile(upstreams)
