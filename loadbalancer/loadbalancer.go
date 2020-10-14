@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"time"
 
 	"inet.af/tcpproxy"
 
@@ -26,6 +27,10 @@ import (
 // Usage: call Run() to start lb and wait for shutdown, call Close() to shutdown lb.
 type TCP struct {
 	tcpproxy.Proxy
+
+	DialTimeout     time.Duration
+	KeepAlivePeriod time.Duration
+	TCPUserTimeout  time.Duration
 
 	Logger *log.Logger
 
@@ -51,8 +56,11 @@ func (upstream lbUpstream) HealthCheck(ctx context.Context) error {
 }
 
 type lbTarget struct {
-	list   *upstream.List
-	logger *log.Logger
+	list            *upstream.List
+	logger          *log.Logger
+	dialTimeout     time.Duration
+	keepAlivePeriod time.Duration
+	tcpUserTimeout  time.Duration
 }
 
 func (target *lbTarget) HandleConn(conn net.Conn) {
@@ -69,6 +77,9 @@ func (target *lbTarget) HandleConn(conn net.Conn) {
 	target.logger.Printf("proxying connection %s -> %s", conn.RemoteAddr(), upstream.upstream)
 
 	upstreamTarget := tcpproxy.To(upstream.upstream)
+	upstreamTarget.DialTimeout = target.dialTimeout
+	upstreamTarget.KeepAlivePeriod = target.keepAlivePeriod
+	upstreamTarget.TCPUserTimeout = target.tcpUserTimeout
 	upstreamTarget.OnDialError = func(src net.Conn, dstDialErr error) {
 		src.Close() //nolint: errcheck
 
@@ -78,6 +89,8 @@ func (target *lbTarget) HandleConn(conn net.Conn) {
 	}
 
 	upstreamTarget.HandleConn(conn)
+
+	target.logger.Printf("closing connection %s -> %s", conn.RemoteAddr(), upstream.upstream)
 }
 
 // AddRoute installs load balancer route from listen address ipAddr to list of upstreams.
@@ -109,8 +122,11 @@ func (t *TCP) AddRoute(ipPort string, upstreamAddrs []string, options ...upstrea
 	t.routes[ipPort] = list
 
 	t.Proxy.AddRoute(ipPort, &lbTarget{
-		list:   list,
-		logger: t.Logger,
+		list:            list,
+		logger:          t.Logger,
+		dialTimeout:     t.DialTimeout,
+		keepAlivePeriod: t.KeepAlivePeriod,
+		tcpUserTimeout:  t.TCPUserTimeout,
 	})
 
 	return nil
