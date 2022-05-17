@@ -1,7 +1,6 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2020-09-01T20:34:11Z by kres ee90a80-dirty.
-
+# Generated on 2022-05-17T19:13:12Z by kres dbed153.
 
 # options for analysis running
 run:
@@ -22,7 +21,6 @@ output:
   uniq-by-line: true
   path-prefix: ""
 
-
 # all available settings of specific linters
 linters-settings:
   dogsled:
@@ -41,6 +39,13 @@ linters-settings:
     local-prefixes: github.com/talos-systems/go-loadbalancer
   gocognit:
     min-complexity: 30
+  ireturn:
+    allow:
+      - anon
+      - error
+      - empty
+      - stdlib
+      - github.com\/talos-systems\/kres\/internal\/dag.Node
   nestif:
     min-complexity: 5
   goconst:
@@ -75,8 +80,6 @@ linters-settings:
   lll:
     line-length: 200
     tab-width: 4
-  maligned:
-    suggest-new: true
   misspell:
     locale: US
     ignore-words: []
@@ -93,7 +96,7 @@ linters-settings:
     require-explanation: false
     require-specific: true
   rowserrcheck: {}
-  testpackage:
+  testpackage: {}
   unparam:
     check-exported: false
   unused:
@@ -112,22 +115,37 @@ linters-settings:
     allow-separated-leading-comment: false
   gofumpt:
     extra-rules: false
+  cyclop:
+      # the maximal code complexity to report
+      max-complexity: 20
 
 linters:
   enable-all: true
-  disable:
-    - gas
-    - typecheck
-    - gochecknoglobals
-    - gochecknoinits
-    - funlen
-    - godox
-    - gomnd
-    - goerr113
-    - nestif
   disable-all: false
   fast: false
-
+  disable:
+    - exhaustivestruct
+    - forbidigo
+    - funlen
+    - gas
+    - gochecknoglobals
+    - gochecknoinits
+    - godox
+    - goerr113
+    - gomnd
+    - gomoddirectives
+    - nestif
+    - paralleltest
+    - tagliatelle
+    - thelper
+    - typecheck
+    - varnamelen
+    - wrapcheck
+    # abandoned linters for which golangci shows the warning that the repo is archived by the owner
+    - interfacer
+    - maligned
+    - golint
+    - scopelint
 
 issues:
   exclude: []
@@ -136,10 +154,8 @@ issues:
   exclude-case-sensitive: false
   max-issues-per-linter: 10
   max-same-issues: 3
-
   new: false
 
 severity:
   default-severity: error
-
   case-sensitive: false

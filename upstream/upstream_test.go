@@ -175,10 +175,10 @@ func (suite *ListSuite) TestHealthcheck() {
 		for i := 0; i < 10; i++ {
 			backend, err := l.Pick()
 			if err != nil {
-				return retry.UnexpectedError(err)
+				return err
 			}
 
-			if backend.(mockBackend) != mockBackend("success") {
+			if backend.(mockBackend) != mockBackend("success") { //nolint:forcetypeassert
 				return retry.ExpectedError(fmt.Errorf("unexpected %v", backend))
 			}
 		}

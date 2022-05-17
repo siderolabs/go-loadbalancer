@@ -1,7 +1,7 @@
 ---
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2020-09-01T20:34:11Z by kres ee90a80-dirty.
+# Generated on 2022-05-17T19:13:12Z by kres dbed153.
 
 kind: pipeline
 type: kubernetes
@@ -122,9 +122,59 @@ steps:
   depends_on:
   - base
 
+- name: release-notes
+  pull: always
+  image: autonomy/build-container:latest
+  commands:
+  - make release-notes
+  volumes:
+  - name: outer-docker-socket
+    path: /var/outer-run
+  - name: docker-socket
+    path: /var/run
+  - name: buildx
+    path: /root/.docker/buildx
+  - name: ssh
+    path: /root/.ssh
+  when:
+    event:
+    - tag
+  depends_on:
+  - unit-tests
+  - coverage
+  - lint
+
+- name: release
+  pull: always
+  image: plugins/github-release
+  settings:
+    api_key:
+      from_secret: github_token
+    checksum:
+    - sha256
+    - sha512
+    draft: true
+    files:
+    - _out/*
+    note: _out/RELEASE_NOTES.md
+  volumes:
+  - name: outer-docker-socket
+    path: /var/outer-run
+  - name: docker-socket
+    path: /var/run
+  - name: buildx
+    path: /root/.docker/buildx
+  - name: ssh
+    path: /root/.ssh
+  when:
+    event:
+    - tag
+  depends_on:
+  - release-notes
+
 services:
 - name: docker
-  image: docker:19.03-dind
+  image: docker:20.10-dind
   entrypoint:
   - dockerd
   commands:
@@ -132,7 +182,6 @@ services:
   - --dns=8.8.4.4
   - --mtu=1500
   - --log-level=error
-  - --insecure-registry=http://registry.ci.svc:5000
   privileged: true
   volumes:
   - name: outer-docker-socket

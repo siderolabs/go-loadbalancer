@@ -28,18 +28,18 @@ import (
 type TCP struct {
 	tcpproxy.Proxy
 
-	DialTimeout     time.Duration
-	KeepAlivePeriod time.Duration
-	TCPUserTimeout  time.Duration
-
 	Logger *log.Logger
 
 	routes map[string]*upstream.List
+
+	DialTimeout     time.Duration
+	KeepAlivePeriod time.Duration
+	TCPUserTimeout  time.Duration
 }
 
 type lbUpstream struct {
-	upstream string
 	logger   *log.Logger
+	upstream string
 }
 
 func (upstream lbUpstream) HealthCheck(ctx context.Context) error {
@@ -72,7 +72,7 @@ func (target *lbTarget) HandleConn(conn net.Conn) {
 		return
 	}
 
-	upstream := upstreamBackend.(lbUpstream) //nolint: errcheck
+	upstream := upstreamBackend.(lbUpstream) //nolint:errcheck,forcetypeassert
 
 	target.logger.Printf("proxying connection %s -> %s", conn.RemoteAddr(), upstream.upstream)
 

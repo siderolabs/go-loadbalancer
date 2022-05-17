@@ -100,17 +100,17 @@ func WithHealthcheckTimeout(timeout time.Duration) ListOption {
 // by fail delta score, and every successful check updates score by success score delta (defaults are -1/+1).
 //
 // Backend might be used if its score is not negative.
-type List struct {
-	lowScore, highScore               float64
-	failScoreDelta, successScoreDelta float64
-	initialScore                      float64
-
+type List struct { //nolint:govet
 	healthcheckInterval time.Duration
 	healthcheckTimeout  time.Duration
 
 	healthWg        sync.WaitGroup
-	healthCtx       context.Context
+	healthCtx       context.Context //nolint:containedctx
 	healthCtxCancel context.CancelFunc
+
+	lowScore, highScore               float64
+	failScoreDelta, successScoreDelta float64
+	initialScore                      float64
 
 	// Following fields are protected by mutex
 	mu sync.Mutex
@@ -239,7 +239,7 @@ func (list *List) Down(upstream Backend) {
 //
 // Default policy is to pick healthy (non-negative score) backend in
 // round-robin fashion.
-func (list *List) Pick() (Backend, error) {
+func (list *List) Pick() (Backend, error) { //nolint:ireturn
 	list.mu.Lock()
 	defer list.mu.Unlock()
 

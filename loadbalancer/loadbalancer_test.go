@@ -19,10 +19,10 @@ import (
 )
 
 type mockUpstream struct {
-	identity string
-
 	addr string
 	l    net.Listener
+
+	identity string
 }
 
 func (u *mockUpstream) Start() error {
