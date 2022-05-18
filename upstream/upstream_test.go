@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"github.com/talos-systems/go-retry/retry"
+	"go.uber.org/goleak"
 
 	"github.com/talos-systems/go-loadbalancer/upstream"
 )
@@ -280,5 +281,7 @@ func (suite *ListSuite) TestReconcile() {
 }
 
 func TestListSuite(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+
 	suite.Run(t, new(ListSuite))
 }

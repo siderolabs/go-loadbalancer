@@ -6,10 +6,8 @@
 package loadbalancer
 
 import (
-	"context"
 	"fmt"
 	"log"
-	"net"
 	"time"
 
 	"inet.af/tcpproxy"
@@ -37,66 +35,12 @@ type TCP struct {
 	TCPUserTimeout  time.Duration
 }
 
-type lbUpstream struct {
-	logger   *log.Logger
-	upstream string
-}
-
-func (upstream lbUpstream) HealthCheck(ctx context.Context) error {
-	d := net.Dialer{}
-
-	c, err := d.DialContext(ctx, "tcp", upstream.upstream)
-	if err != nil {
-		upstream.logger.Printf("healthcheck failed for %q: %s", upstream.upstream, err)
-
-		return err
-	}
-
-	return c.Close()
-}
-
-type lbTarget struct {
-	list            *upstream.List
-	logger          *log.Logger
-	dialTimeout     time.Duration
-	keepAlivePeriod time.Duration
-	tcpUserTimeout  time.Duration
-}
-
-func (target *lbTarget) HandleConn(conn net.Conn) {
-	upstreamBackend, err := target.list.Pick()
-	if err != nil {
-		target.logger.Printf("no upstreams available, closing connection from %s", conn.RemoteAddr())
-		conn.Close() //nolint: errcheck
-
-		return
-	}
-
-	upstream := upstreamBackend.(lbUpstream) //nolint:errcheck,forcetypeassert
-
-	target.logger.Printf("proxying connection %s -> %s", conn.RemoteAddr(), upstream.upstream)
-
-	upstreamTarget := tcpproxy.To(upstream.upstream)
-	upstreamTarget.DialTimeout = target.dialTimeout
-	upstreamTarget.KeepAlivePeriod = target.keepAlivePeriod
-	upstreamTarget.TCPUserTimeout = target.tcpUserTimeout
-	upstreamTarget.OnDialError = func(src net.Conn, dstDialErr error) {
-		src.Close() //nolint: errcheck
-
-		target.logger.Printf("error dialing upstream %s: %s", upstream.upstream, dstDialErr)
-
-		target.list.Down(upstreamBackend)
-	}
-
-	upstreamTarget.HandleConn(conn)
-
-	target.logger.Printf("closing connection %s -> %s", conn.RemoteAddr(), upstream.upstream)
-}
-
 // AddRoute installs load balancer route from listen address ipAddr to list of upstreams.
 //
 // TCP automatically does background health checks for the upstreams and picks only healthy
 // ones. Healthcheck is simple Dial attempt.
+//
+// AddRoute should be called before Start().
 func (t *TCP) AddRoute(ipPort string, upstreamAddrs []string, options ...upstream.ListOption) error {
 	if t.Logger == nil {
 		t.Logger = log.New(log.Writer(), "", log.Flags())
@@ -108,9 +52,9 @@ func (t *TCP) AddRoute(ipPort string, upstreamAddrs []string, options ...upstrea
 
 	upstreams := make([]upstream.Backend, len(upstreamAddrs))
 	for i := range upstreams {
-		upstreams[i] = lbUpstream{
-			upstream: upstreamAddrs[i],
-			logger:   t.Logger,
+		upstreams[i] = node{
+			address: upstreamAddrs[i],
+			logger:  t.Logger,
 		}
 	}
 
@@ -133,9 +77,11 @@ func (t *TCP) AddRoute(ipPort string, upstreamAddrs []string, options ...upstrea
 }
 
 // ReconcileRoute updates the list of upstreamAddrs for the specified route (ipPort).
+//
+// ReconcileRoute can be called when the loadbalancer is running.
 func (t *TCP) ReconcileRoute(ipPort string, upstreamAddrs []string) error {
 	if t.routes == nil {
-		t.routes = make(map[string]*upstream.List)
+		return fmt.Errorf("no routes installed")
 	}
 
 	list := t.routes[ipPort]
@@ -145,13 +91,30 @@ func (t *TCP) ReconcileRoute(ipPort string, upstreamAddrs []string) error {
 
 	upstreams := make([]upstream.Backend, len(upstreamAddrs))
 	for i := range upstreams {
-		upstreams[i] = lbUpstream{
-			upstream: upstreamAddrs[i],
-			logger:   t.Logger,
+		upstreams[i] = node{
+			address: upstreamAddrs[i],
+			logger:  t.Logger,
 		}
 	}
 
 	list.Reconcile(upstreams)
+
+	return nil
+}
+
+// Close the load balancer and stop health checks on upstreams.
+func (t *TCP) Close() error {
+	if err := t.Proxy.Close(); err != nil {
+		return err
+	}
+
+	if t.routes == nil {
+		return nil
+	}
+
+	for _, upstream := range t.routes {
+		upstream.Shutdown()
+	}
 
 	return nil
 }

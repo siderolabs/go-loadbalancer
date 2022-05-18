@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/goleak"
 
 	"github.com/talos-systems/go-loadbalancer/loadbalancer"
 	"github.com/talos-systems/go-loadbalancer/upstream"
@@ -271,5 +272,7 @@ func (suite *TCPSuite) TestBalancer() {
 }
 
 func TestTCPSuite(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+
 	suite.Run(t, new(TCPSuite))
 }
