@@ -6,7 +6,7 @@ package controlplane_test
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -95,7 +95,7 @@ func TestLoadBalancer(t *testing.T) {
 
 		defer c.Close() //nolint:errcheck
 
-		id, err := ioutil.ReadAll(c)
+		id, err := io.ReadAll(c)
 		if err != nil {
 			return 0, retry.ExpectedError(err)
 		}

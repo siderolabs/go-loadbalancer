@@ -1,6 +1,6 @@
 module github.com/talos-systems/go-loadbalancer
 
-go 1.18
+go 1.19
 
 replace inet.af/tcpproxy => github.com/smira/tcpproxy v0.0.0-20201015133617-de5f7797b95b
 

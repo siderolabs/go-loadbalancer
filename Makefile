@@ -1,6 +1,6 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2022-05-17T19:13:12Z by kres dbed153.
+# Generated on 2022-08-09T11:41:23Z by kres e62e51e.
 
 # common variables
 
@@ -11,15 +11,18 @@ ARTIFACTS := _out
 REGISTRY ?= ghcr.io
 USERNAME ?= siderolabs
 REGISTRY_AND_USERNAME ?= $(REGISTRY)/$(USERNAME)
+GOLANGCILINT_VERSION ?= v1.48.0
 GOFUMPT_VERSION ?= v0.3.1
-GO_VERSION ?= 1.18
-GOIMPORTS_VERSION ?= v0.1.10
-PROTOBUF_GO_VERSION ?= 1.28.0
+GO_VERSION ?= 1.19
+GOIMPORTS_VERSION ?= v0.1.11
+PROTOBUF_GO_VERSION ?= 1.28.1
 GRPC_GO_VERSION ?= 1.2.0
-GRPC_GATEWAY_VERSION ?= 2.10.0
+GRPC_GATEWAY_VERSION ?= 2.11.1
 VTPROTOBUF_VERSION ?= 0.3.0
+DEEPCOPY_VERSION ?= v0.5.5
 TESTPKGS ?= ./...
 KRES_IMAGE ?= ghcr.io/siderolabs/kres:latest
+CONFORMANCE_IMAGE ?= ghcr.io/siderolabs/conform:latest
 
 # docker build settings
 
@@ -37,14 +40,16 @@ COMMON_ARGS += --build-arg=SHA=$(SHA)
 COMMON_ARGS += --build-arg=TAG=$(TAG)
 COMMON_ARGS += --build-arg=USERNAME=$(USERNAME)
 COMMON_ARGS += --build-arg=TOOLCHAIN=$(TOOLCHAIN)
+COMMON_ARGS += --build-arg=GOLANGCILINT_VERSION=$(GOLANGCILINT_VERSION)
 COMMON_ARGS += --build-arg=GOFUMPT_VERSION=$(GOFUMPT_VERSION)
 COMMON_ARGS += --build-arg=GOIMPORTS_VERSION=$(GOIMPORTS_VERSION)
 COMMON_ARGS += --build-arg=PROTOBUF_GO_VERSION=$(PROTOBUF_GO_VERSION)
 COMMON_ARGS += --build-arg=GRPC_GO_VERSION=$(GRPC_GO_VERSION)
 COMMON_ARGS += --build-arg=GRPC_GATEWAY_VERSION=$(GRPC_GATEWAY_VERSION)
 COMMON_ARGS += --build-arg=VTPROTOBUF_VERSION=$(VTPROTOBUF_VERSION)
+COMMON_ARGS += --build-arg=DEEPCOPY_VERSION=$(DEEPCOPY_VERSION)
 COMMON_ARGS += --build-arg=TESTPKGS=$(TESTPKGS)
-TOOLCHAIN ?= docker.io/golang:1.18-alpine
+TOOLCHAIN ?= docker.io/golang:1.19-alpine
 
 # help menu
 
@@ -144,4 +149,9 @@ help:  ## This help menu.
 release-notes:
 	mkdir -p $(ARTIFACTS)
 	@ARTIFACTS=$(ARTIFACTS) ./hack/release.sh $@ $(ARTIFACTS)/RELEASE_NOTES.md $(TAG)
+
+.PHONY: conformance
+conformance:
+	@docker pull $(CONFORMANCE_IMAGE)
+	@docker run --rm -it -v $(PWD):/src -w /src $(CONFORMANCE_IMAGE) enforce
 

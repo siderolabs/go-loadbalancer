@@ -5,7 +5,7 @@
 package loadbalancer_test
 
 import (
-	"io/ioutil"
+	"io"
 	"net"
 	"strconv"
 	"sync"
@@ -120,7 +120,7 @@ func (suite *TCPSuite) TestReconcile() {
 		c, err := net.Dial("tcp", listenAddr)
 		suite.Require().NoError(err)
 
-		id, err := ioutil.ReadAll(c)
+		id, err := io.ReadAll(c)
 		suite.Require().NoError(err)
 
 		// load balancer should go round-robin across all the upstreams [0:pivot]
@@ -143,7 +143,7 @@ func (suite *TCPSuite) TestReconcile() {
 		c, err := net.Dial("tcp", listenAddr)
 		suite.Require().NoError(err)
 
-		id, err := ioutil.ReadAll(c)
+		id, err := io.ReadAll(c)
 		suite.Require().NoError(err)
 
 		// load balancer should go round-robin across all the upstreams [pivot:]
@@ -218,7 +218,7 @@ func (suite *TCPSuite) TestBalancer() {
 		c, err := net.Dial("tcp", listenAddr)
 		suite.Require().NoError(err)
 
-		id, err := ioutil.ReadAll(c)
+		id, err := io.ReadAll(c)
 		suite.Require().NoError(err)
 
 		// load balancer should go round-robin across all the upstreams
@@ -237,7 +237,7 @@ func (suite *TCPSuite) TestBalancer() {
 		c, err := net.Dial("tcp", listenAddr)
 		suite.Require().NoError(err)
 
-		id, err := ioutil.ReadAll(c)
+		id, err := io.ReadAll(c)
 		suite.Require().NoError(err)
 
 		if len(id) == 0 {

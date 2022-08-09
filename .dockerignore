@@ -1,8 +1,9 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2020-09-01T20:34:11Z by kres ee90a80-dirty.
+# Generated on 2022-08-09T11:41:23Z by kres e62e51e.
 
 **
+!controlplane
 !loadbalancer
 !upstream
 !go.mod

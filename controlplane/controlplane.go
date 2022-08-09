@@ -14,21 +14,54 @@ import (
 	"time"
 
 	"github.com/talos-systems/go-loadbalancer/loadbalancer"
+	"github.com/talos-systems/go-loadbalancer/upstream"
 )
 
 // LoadBalancer provides Kubernetes control plane TCP loadbalancer with a way to update endpoints (list of control plane nodes).
-type LoadBalancer struct {
-	lb loadbalancer.TCP
+type LoadBalancer struct { //nolint:govet
+	lb                 loadbalancer.TCP
+	healthCheckOptions []upstream.ListOption
 
 	done chan struct{}
 
 	endpoint string
 }
 
+// LoadBalancerOption configures the load balancer settings.
+type LoadBalancerOption func(*LoadBalancer)
+
+// WithDialTimeout configures the dial timeout.
+func WithDialTimeout(timeout time.Duration) LoadBalancerOption {
+	return func(lb *LoadBalancer) {
+		lb.lb.DialTimeout = timeout
+	}
+}
+
+// WithKeepAlivePeriod configures the keepalive period.
+func WithKeepAlivePeriod(period time.Duration) LoadBalancerOption {
+	return func(lb *LoadBalancer) {
+		lb.lb.KeepAlivePeriod = period
+	}
+}
+
+// WithTCPUserTimeout configures the TCP user timeout.
+func WithTCPUserTimeout(timeout time.Duration) LoadBalancerOption {
+	return func(lb *LoadBalancer) {
+		lb.lb.TCPUserTimeout = timeout
+	}
+}
+
+// WithHealthCheckOptions configures the health check options.
+func WithHealthCheckOptions(options ...upstream.ListOption) LoadBalancerOption {
+	return func(lb *LoadBalancer) {
+		lb.healthCheckOptions = append(lb.healthCheckOptions, options...)
+	}
+}
+
 // NewLoadBalancer initializes the load balancer.
 //
 // If bindPort is zero, load balancer will bind to a random available port.
-func NewLoadBalancer(bindAddress string, bindPort int, logWriter io.Writer) (*LoadBalancer, error) {
+func NewLoadBalancer(bindAddress string, bindPort int, logWriter io.Writer, options ...LoadBalancerOption) (*LoadBalancer, error) {
 	if bindPort == 0 {
 		var err error
 
@@ -47,10 +80,14 @@ func NewLoadBalancer(bindAddress string, bindPort int, logWriter io.Writer) (*Lo
 	lb.lb.KeepAlivePeriod = time.Second
 	lb.lb.TCPUserTimeout = 5 * time.Second
 
+	for _, option := range options {
+		option(lb)
+	}
+
 	lb.lb.Logger = log.New(logWriter, lb.endpoint+" ", log.Default().Flags())
 
 	// create a route without any upstreams yet
-	if err := lb.lb.AddRoute(lb.endpoint, nil); err != nil {
+	if err := lb.lb.AddRoute(lb.endpoint, nil, lb.healthCheckOptions...); err != nil {
 		return nil, err
 	}
 
