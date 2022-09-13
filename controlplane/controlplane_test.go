@@ -116,6 +116,13 @@ func TestLoadBalancer(t *testing.T) {
 		return nil
 	}))
 
+	{
+		healthy, err := lb.Healthy()
+		require.NoError(t, err)
+
+		assert.True(t, healthy)
+	}
+
 	// change the upstreams
 	upstreamCh <- upstreamAddrs[pivot:]
 
@@ -133,9 +140,33 @@ func TestLoadBalancer(t *testing.T) {
 		return nil
 	}))
 
-	assert.NoError(t, lb.Shutdown())
+	{
+		healthy, err := lb.Healthy()
+		require.NoError(t, err)
+
+		assert.True(t, healthy)
+	}
 
 	for i := range upstreams {
 		upstreams[i].Close()
 	}
+
+	{
+		err := retry.Constant(time.Second * 10).Retry(func() error {
+			healthy, err := lb.Healthy()
+			if err != nil {
+				return err
+			}
+
+			if healthy {
+				return retry.ExpectedErrorf("lb is still healthy")
+			}
+
+			return nil
+		})
+
+		require.NoError(t, err)
+	}
+
+	assert.NoError(t, lb.Shutdown())
 }

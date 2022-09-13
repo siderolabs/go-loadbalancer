@@ -6,6 +6,7 @@
 package loadbalancer
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -33,6 +34,25 @@ type TCP struct {
 	DialTimeout     time.Duration
 	KeepAlivePeriod time.Duration
 	TCPUserTimeout  time.Duration
+}
+
+// IsRouteHealthy checks if the route has at least one upstream available.
+func (t *TCP) IsRouteHealthy(ipPort string) (bool, error) {
+	list, ok := t.routes[ipPort]
+	if !ok {
+		return false, fmt.Errorf("no routes with ipPort %s registered", ipPort)
+	}
+
+	_, err := list.Pick()
+	if err != nil {
+		if errors.Is(err, upstream.ErrNoUpstreams) {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	return true, nil
 }
 
 // AddRoute installs load balancer route from listen address ipAddr to list of upstreams.

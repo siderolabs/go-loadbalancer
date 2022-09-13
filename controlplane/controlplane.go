@@ -125,6 +125,11 @@ func (lb *LoadBalancer) Start(upstreamCh <-chan []string) error {
 	return nil
 }
 
+// Healthy returns true if at least one upstream is available.
+func (lb *LoadBalancer) Healthy() (bool, error) {
+	return lb.lb.IsRouteHealthy(lb.endpoint)
+}
+
 // Shutdown the loadbalancer listener and wait for the connections to be closed.
 func (lb *LoadBalancer) Shutdown() error {
 	if err := lb.lb.Close(); err != nil {

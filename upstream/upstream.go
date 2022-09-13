@@ -12,6 +12,9 @@ import (
 	"time"
 )
 
+// ErrNoUpstreams is returned from Pick method, when there are no upstreams available.
+var ErrNoUpstreams = fmt.Errorf("no upstreams available")
+
 // Backend is an interface which should be implemented for a Pick entry.
 type Backend interface {
 	HealthCheck(ctx context.Context) error
@@ -253,7 +256,7 @@ func (list *List) Pick() (Backend, error) { //nolint:ireturn
 		}
 	}
 
-	return nil, fmt.Errorf("no upstreams available")
+	return nil, ErrNoUpstreams
 }
 
 func (list *List) healthcheck() {
