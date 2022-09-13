@@ -15,7 +15,7 @@ import (
 	"github.com/talos-systems/go-retry/retry"
 	"go.uber.org/goleak"
 
-	"github.com/talos-systems/go-loadbalancer/upstream"
+	"github.com/siderolabs/go-loadbalancer/upstream"
 )
 
 type mockBackend string

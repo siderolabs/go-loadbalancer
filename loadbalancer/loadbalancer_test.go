@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/goleak"
 
-	"github.com/talos-systems/go-loadbalancer/loadbalancer"
-	"github.com/talos-systems/go-loadbalancer/upstream"
+	"github.com/siderolabs/go-loadbalancer/loadbalancer"
+	"github.com/siderolabs/go-loadbalancer/upstream"
 )
 
 type mockUpstream struct {

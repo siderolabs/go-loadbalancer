@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/talos-systems/go-loadbalancer/loadbalancer"
-	"github.com/talos-systems/go-loadbalancer/upstream"
+	"github.com/siderolabs/go-loadbalancer/loadbalancer"
+	"github.com/siderolabs/go-loadbalancer/upstream"
 )
 
 // LoadBalancer provides Kubernetes control plane TCP loadbalancer with a way to update endpoints (list of control plane nodes).

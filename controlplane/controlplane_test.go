@@ -18,7 +18,7 @@ import (
 	"github.com/talos-systems/go-retry/retry"
 	"go.uber.org/goleak"
 
-	"github.com/talos-systems/go-loadbalancer/controlplane"
+	"github.com/siderolabs/go-loadbalancer/controlplane"
 )
 
 type mockUpstream struct {

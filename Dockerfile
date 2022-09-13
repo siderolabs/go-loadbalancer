@@ -2,7 +2,7 @@
 
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2022-08-09T11:41:23Z by kres e62e51e.
+# Generated on 2022-09-13T13:45:46Z by kres latest.
 
 ARG TOOLCHAIN
 
@@ -10,9 +10,9 @@ ARG TOOLCHAIN
 FROM scratch AS generate
 
 # runs markdownlint
-FROM node:18.7.0-alpine AS lint-markdown
+FROM docker.io/node:18.9.0-alpine3.16 AS lint-markdown
 WORKDIR /src
-RUN npm i -g markdownlint-cli@0.31.1
+RUN npm i -g markdownlint-cli@0.32.2
 RUN npm i sentences-per-line@0.2.1
 COPY .markdownlint.json .
 COPY ./README.md ./README.md
@@ -23,7 +23,7 @@ FROM ${TOOLCHAIN} AS toolchain
 RUN apk --update --no-cache add bash curl build-base protoc protobuf-dev
 
 # build tools
-FROM toolchain AS tools
+FROM --platform=${BUILDPLATFORM} toolchain AS tools
 ENV GO111MODULE on
 ENV CGO_ENABLED 0
 ENV GOPATH /go
@@ -58,7 +58,7 @@ RUN FILES="$(gofumpt -l .)" && test -z "${FILES}" || (echo -e "Source code is no
 
 # runs goimports
 FROM base AS lint-goimports
-RUN FILES="$(goimports -l -local github.com/talos-systems/go-loadbalancer .)" && test -z "${FILES}" || (echo -e "Source code is not formatted with 'goimports -w -local github.com/talos-systems/go-loadbalancer .':\n${FILES}"; exit 1)
+RUN FILES="$(goimports -l -local github.com/siderolabs/go-loadbalancer .)" && test -z "${FILES}" || (echo -e "Source code is not formatted with 'goimports -w -local github.com/siderolabs/go-loadbalancer .':\n${FILES}"; exit 1)
 
 # runs golangci-lint
 FROM base AS lint-golangci-lint

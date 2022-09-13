@@ -1,4 +1,4 @@
-module github.com/talos-systems/go-loadbalancer
+module github.com/siderolabs/go-loadbalancer
 
 go 1.19
 

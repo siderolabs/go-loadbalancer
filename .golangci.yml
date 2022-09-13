@@ -1,6 +1,6 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2022-08-09T11:41:23Z by kres e62e51e.
+# Generated on 2022-09-13T13:45:46Z by kres latest.
 
 # options for analysis running
 run:
@@ -36,7 +36,7 @@ linters-settings:
     lines: 60
     statements: 40
   gci:
-    local-prefixes: github.com/talos-systems/go-loadbalancer
+    local-prefixes: github.com/siderolabs/go-loadbalancer
   gocognit:
     min-complexity: 30
   ireturn:
@@ -65,7 +65,7 @@ linters-settings:
   gofmt:
     simplify: true
   goimports:
-    local-prefixes: github.com/talos-systems/go-loadbalancer
+    local-prefixes: github.com/siderolabs/go-loadbalancer
   golint:
     min-confidence: 0.8
   gomnd:

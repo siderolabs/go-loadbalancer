@@ -13,7 +13,7 @@ import (
 
 	"inet.af/tcpproxy"
 
-	"github.com/talos-systems/go-loadbalancer/upstream"
+	"github.com/siderolabs/go-loadbalancer/upstream"
 )
 
 // TCP is a simple loadbalancer for TCP connections across a set of upstreams.

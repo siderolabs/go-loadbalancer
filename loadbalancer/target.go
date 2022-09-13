@@ -11,7 +11,7 @@ import (
 
 	"inet.af/tcpproxy"
 
-	"github.com/talos-systems/go-loadbalancer/upstream"
+	"github.com/siderolabs/go-loadbalancer/upstream"
 )
 
 type lbTarget struct {
