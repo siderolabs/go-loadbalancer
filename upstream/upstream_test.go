@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/siderolabs/go-retry/retry"
 	"github.com/stretchr/testify/suite"
-	"github.com/talos-systems/go-retry/retry"
 	"go.uber.org/goleak"
 
 	"github.com/siderolabs/go-loadbalancer/upstream"
