@@ -7,7 +7,6 @@ package loadbalancer
 import (
 	"context"
 	"log"
-	"net"
 )
 
 type node struct {
@@ -16,7 +15,7 @@ type node struct {
 }
 
 func (upstream node) HealthCheck(ctx context.Context) error {
-	d := net.Dialer{}
+	d := probeDialer()
 
 	c, err := d.DialContext(ctx, "tcp", upstream.address)
 	if err != nil {
