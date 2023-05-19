@@ -11,6 +11,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/siderolabs/gen/slices"
 	"github.com/siderolabs/tcpproxy"
 
 	"github.com/siderolabs/go-loadbalancer/upstream"
@@ -29,7 +30,7 @@ type TCP struct {
 
 	Logger *log.Logger
 
-	routes map[string]*upstream.List
+	routes map[string]*upstream.List[node]
 
 	DialTimeout     time.Duration
 	KeepAlivePeriod time.Duration
@@ -67,18 +68,22 @@ func (t *TCP) AddRoute(ipPort string, upstreamAddrs []string, options ...upstrea
 	}
 
 	if t.routes == nil {
-		t.routes = make(map[string]*upstream.List)
+		t.routes = make(map[string]*upstream.List[node])
 	}
 
-	upstreams := make([]upstream.Backend, len(upstreamAddrs))
-	for i := range upstreams {
-		upstreams[i] = node{
-			address: upstreamAddrs[i],
+	upstreams := slices.Map(upstreamAddrs, func(addr string) node {
+		return node{
+			address: addr,
 			logger:  t.Logger,
 		}
-	}
+	})
 
-	list, err := upstream.NewList(upstreams, options...)
+	// We can still override tiers if we want to on layers above.
+	options = append([]upstream.ListOption{upstream.WithTiers(0, upstream.Tier(len(mins)-1), 1)}, options...)
+
+	list, err := upstream.NewListWithCmp(upstreams, func(a, b node) bool {
+		return a.address == b.address
+	}, options...)
 	if err != nil {
 		return err
 	}
@@ -109,13 +114,12 @@ func (t *TCP) ReconcileRoute(ipPort string, upstreamAddrs []string) error {
 		return fmt.Errorf("handler not registered for %q", ipPort)
 	}
 
-	upstreams := make([]upstream.Backend, len(upstreamAddrs))
-	for i := range upstreams {
-		upstreams[i] = node{
-			address: upstreamAddrs[i],
+	upstreams := slices.Map(upstreamAddrs, func(addr string) node {
+		return node{
+			address: addr,
 			logger:  t.Logger,
 		}
-	}
+	})
 
 	list.Reconcile(upstreams)
 

@@ -2,7 +2,7 @@
 
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2023-05-08T18:28:37Z by kres latest.
+# Generated on 2023-05-17T09:08:38Z by kres latest.
 
 ARG TOOLCHAIN
 
@@ -10,9 +10,9 @@ ARG TOOLCHAIN
 FROM scratch AS generate
 
 # runs markdownlint
-FROM docker.io/node:20.0.0-alpine3.16 AS lint-markdown
+FROM docker.io/node:20.2.0-alpine3.17 AS lint-markdown
 WORKDIR /src
-RUN npm i -g markdownlint-cli@0.33.0
+RUN npm i -g markdownlint-cli@0.34.0
 RUN npm i sentences-per-line@0.2.1
 COPY .markdownlint.json .
 COPY ./README.md ./README.md

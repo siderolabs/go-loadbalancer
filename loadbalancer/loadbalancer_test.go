@@ -102,6 +102,7 @@ func (suite *TCPSuite) TestReconcile() {
 		upstream.WithScoreDeltas(-1, 1),
 		upstream.WithHealthcheckInterval(time.Second),
 		upstream.WithHealthcheckTimeout(100*time.Millisecond),
+		upstream.WithTiers(0, 0, 0),
 	))
 
 	suite.Require().NoError(lb.Start())
@@ -200,6 +201,7 @@ func (suite *TCPSuite) TestBalancer() {
 		upstream.WithScoreDeltas(-1, 1),
 		upstream.WithHealthcheckInterval(time.Second),
 		upstream.WithHealthcheckTimeout(100*time.Millisecond),
+		upstream.WithTiers(0, 0, 0),
 	))
 
 	suite.Require().NoError(lb.Start())

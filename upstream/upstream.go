@@ -7,9 +7,13 @@ package upstream
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/siderolabs/gen/channel"
+	"github.com/siderolabs/gen/slices"
 )
 
 // ErrNoUpstreams is returned from Pick method, when there are no upstreams available.
@@ -17,20 +21,28 @@ var ErrNoUpstreams = fmt.Errorf("no upstreams available")
 
 // Backend is an interface which should be implemented for a Pick entry.
 type Backend interface {
-	HealthCheck(ctx context.Context) error
+	HealthCheck(ctx context.Context) (Tier, error)
 }
 
-type node struct {
-	backend Backend
+// BackendCmp is an interface which should be implemented for a Pick entry.
+// It is similar to [Backend], but used for generics.
+type BackendCmp interface {
+	comparable
+	Backend
+}
+
+type node[T Backend] struct {
+	backend T
 	score   float64
+	tier    Tier
 }
 
 // ListOption allows to configure List.
-type ListOption func(*List) error
+type ListOption func(*ListConfig) error
 
 // WithLowHighScores configures low and high score.
 func WithLowHighScores(lowScore, highScore float64) ListOption {
-	return func(l *List) error {
+	return func(l *ListConfig) error {
 		if l.lowScore > 0 {
 			return fmt.Errorf("lowScore should be non-positive")
 		}
@@ -51,7 +63,7 @@ func WithLowHighScores(lowScore, highScore float64) ListOption {
 
 // WithScoreDeltas configures fail and success score delta.
 func WithScoreDeltas(failScoreDelta, successScoreDelta float64) ListOption {
-	return func(l *List) error {
+	return func(l *ListConfig) error {
 		if l.failScoreDelta >= 0 {
 			return fmt.Errorf("failScoreDelta should be negative")
 		}
@@ -68,7 +80,7 @@ func WithScoreDeltas(failScoreDelta, successScoreDelta float64) ListOption {
 
 // WithInitialScore configures initial backend score.
 func WithInitialScore(initialScore float64) ListOption {
-	return func(l *List) error {
+	return func(l *ListConfig) error {
 		l.initialScore = initialScore
 
 		return nil
@@ -77,7 +89,7 @@ func WithInitialScore(initialScore float64) ListOption {
 
 // WithHealthcheckInterval configures healthcheck interval.
 func WithHealthcheckInterval(interval time.Duration) ListOption {
-	return func(l *List) error {
+	return func(l *ListConfig) error {
 		l.healthcheckInterval = interval
 
 		return nil
@@ -86,8 +98,31 @@ func WithHealthcheckInterval(interval time.Duration) ListOption {
 
 // WithHealthcheckTimeout configures healthcheck timeout (for each backend).
 func WithHealthcheckTimeout(timeout time.Duration) ListOption {
-	return func(l *List) error {
+	return func(l *ListConfig) error {
 		l.healthcheckTimeout = timeout
+
+		return nil
+	}
+}
+
+// Tier is a type for backend tier.
+type Tier int
+
+// WithTiers configures backend tier min, max, and start.
+func WithTiers(min, max, init Tier) ListOption {
+	return func(l *ListConfig) error {
+		switch {
+		case min < 0 || max < 0 || init < 0:
+			return errors.New("min, max and init tiers should be non-negative")
+		case min > max:
+			return errors.New("min tier should be less or equal to max tier")
+		case init < min || init > max:
+			return errors.New("init tier should be between min and max tier")
+		case min > 10 || max > 10 || init > 10:
+			return errors.New("min, max and init tiers should be less or equal to 10")
+		}
+
+		l.initTier, l.minTier, l.maxTier = init, min, max
 
 		return nil
 	}
@@ -103,61 +138,88 @@ func WithHealthcheckTimeout(timeout time.Duration) ListOption {
 // by fail delta score, and every successful check updates score by success score delta (defaults are -1/+1).
 //
 // Backend might be used if its score is not negative.
-type List struct { //nolint:govet
+type List[T Backend] struct { //nolint:govet
+	listConfig
+
+	cmp func(T, T) bool
+
+	// Following fields are protected by mutex
+	mu      sync.Mutex
+	nodes   []node[T]
+	current int
+}
+
+// ListConfig is a configuration for List. It is separated from List to allow
+// usage of functional options without exposing type in their API.
+type ListConfig struct { //nolint:govet
 	healthcheckInterval time.Duration
 	healthcheckTimeout  time.Duration
 
 	healthWg        sync.WaitGroup
-	healthCtx       context.Context //nolint:containedctx
 	healthCtxCancel context.CancelFunc
 
 	lowScore, highScore               float64
 	failScoreDelta, successScoreDelta float64
 	initialScore                      float64
 
-	// Following fields are protected by mutex
-	mu sync.Mutex
-
-	nodes   []node
-	current int
+	minTier, maxTier, initTier Tier
 }
 
-// NewList initializes new list with upstream backends and options and starts health checks.
+// This allows us to hide embedded struct from public access.
+type listConfig = ListConfig
+
+// NewList initializes new list with upstream backends and options and starts health checks. It uses
 //
 // List should be stopped with `.Shutdown()`.
-func NewList(upstreams []Backend, options ...ListOption) (*List, error) {
+func NewList[T BackendCmp](upstreams []T, options ...ListOption) (*List[T], error) {
+	return NewListWithCmp[T](upstreams, func(a, b T) bool { return a == b }, options...)
+}
+
+// NewListWithCmp initializes new list with upstream backends and options and starts health checks.
+//
+// List should be stopped with `.Shutdown()`.
+func NewListWithCmp[T Backend](upstreams []T, cmp func(T, T) bool, options ...ListOption) (*List[T], error) {
 	// initialize with defaults
-	list := &List{
-		lowScore:          -3.0,
-		highScore:         3.0,
-		failScoreDelta:    -1.0,
-		successScoreDelta: 1.0,
-		initialScore:      1.0,
+	list := &List[T]{
+		listConfig: listConfig{
+			lowScore:          -3.0,
+			highScore:         3.0,
+			failScoreDelta:    -1.0,
+			successScoreDelta: 1.0,
+			initialScore:      1.0,
 
-		healthcheckInterval: 1 * time.Second,
-		healthcheckTimeout:  100 * time.Millisecond,
+			healthcheckInterval: 1 * time.Second,
+			healthcheckTimeout:  100 * time.Millisecond,
+			minTier:             0,
+			maxTier:             4,
+			initTier:            0,
+		},
 
+		cmp:     cmp,
 		current: -1,
 	}
 
-	list.healthCtx, list.healthCtxCancel = context.WithCancel(context.Background())
+	var ctx context.Context
+
+	ctx, list.healthCtxCancel = context.WithCancel(context.Background())
 
 	for _, opt := range options {
-		if err := opt(list); err != nil {
+		if err := opt(&list.listConfig); err != nil {
 			return nil, err
 		}
 	}
 
-	list.nodes = make([]node, len(upstreams))
-
-	for i := range list.nodes {
-		list.nodes[i].backend = upstreams[i]
-		list.nodes[i].score = list.initialScore
-	}
+	list.nodes = slices.Map(upstreams, func(b T) node[T] {
+		return node[T]{
+			backend: b,
+			score:   list.initialScore,
+			tier:    list.initTier,
+		}
+	})
 
 	list.healthWg.Add(1)
 
-	go list.healthcheck()
+	go list.healthcheck(ctx)
 
 	return list, nil
 }
@@ -166,56 +228,55 @@ func NewList(upstreams []Backend, options ...ListOption) (*List, error) {
 //
 // Any new backends are added with initial score, score is untouched
 // for backends which haven't changed their score.
-func (list *List) Reconcile(upstreams []Backend) {
-	newUpstreams := make(map[Backend]struct{}, len(upstreams))
-
-	for _, upstream := range upstreams {
-		newUpstreams[upstream] = struct{}{}
-	}
+func (list *List[T]) Reconcile(upstreams []T) {
+	toAdd := slices.Clone(upstreams)
 
 	list.mu.Lock()
 	defer list.mu.Unlock()
 
-	for i := 0; i < len(list.nodes); i++ {
-		if _, exists := newUpstreams[list.nodes[i].backend]; exists {
-			delete(newUpstreams, list.nodes[i].backend)
-
-			continue
+	list.nodes = slices.FilterInPlace(list.nodes, func(b node[T]) bool {
+		idx := slices.IndexFunc(toAdd, func(u T) bool { return list.cmp(u, b.backend) })
+		if idx == -1 {
+			// backend doesn't exist in new upstreams, remove from current node list
+			return false
 		}
 
-		list.nodes = append(list.nodes[:i], list.nodes[i+1:]...)
-		i--
-	}
+		// backend exists, remove from toAdd slice, preserve in current node list
+		toAdd = append(toAdd[:idx], toAdd[idx+1:]...)
 
-	// make insert order predictable by going over the list once again,
-	// as iterating over the map might lead to unpredictable order
-	for _, upstream := range upstreams {
-		if _, ok := newUpstreams[upstream]; !ok {
-			continue
-		}
+		return true
+	})
 
-		list.nodes = append(list.nodes, node{
-			backend: upstream,
+	for _, newB := range toAdd {
+		list.nodes = append(list.nodes, node[T]{
+			backend: newB,
 			score:   list.initialScore,
+			tier:    list.initTier,
 		})
 	}
 }
 
 // Shutdown stops healthchecks.
-func (list *List) Shutdown() {
+func (list *List[T]) Shutdown() {
 	list.healthCtxCancel()
 
 	list.healthWg.Wait()
 }
 
 // Up increases backend score by success score delta.
-func (list *List) Up(upstream Backend) {
+func (list *List[T]) Up(upstream T) {
+	list.upWithTier(upstream, -1)
+}
+
+func (list *List[T]) upWithTier(upstream T, newTier Tier) {
 	list.mu.Lock()
 	defer list.mu.Unlock()
 
 	for i := range list.nodes {
-		if list.nodes[i].backend == upstream {
+		if list.cmp(list.nodes[i].backend, upstream) {
 			list.nodes[i].score += list.successScoreDelta
+			list.updateNodeTier(i, newTier)
+
 			if list.nodes[i].score > list.highScore {
 				list.nodes[i].score = list.highScore
 			}
@@ -223,14 +284,34 @@ func (list *List) Up(upstream Backend) {
 	}
 }
 
+func (list *List[T]) updateNodeTier(i int, newTier Tier) {
+	switch {
+	case newTier == -1:
+		// do nothing, keep old tier
+		return
+	case newTier < list.minTier:
+		newTier = list.minTier
+	case newTier > list.maxTier:
+		newTier = list.maxTier
+	}
+
+	list.nodes[i].tier = newTier
+}
+
 // Down decreases backend score by fail score delta.
-func (list *List) Down(upstream Backend) {
+func (list *List[T]) Down(upstream T) {
+	list.downWithTier(upstream, -1)
+}
+
+func (list *List[T]) downWithTier(upstream T, newTier Tier) {
 	list.mu.Lock()
 	defer list.mu.Unlock()
 
 	for i := range list.nodes {
-		if list.nodes[i].backend == upstream {
+		if list.cmp(list.nodes[i].backend, upstream) {
 			list.nodes[i].score += list.failScoreDelta
+			list.updateNodeTier(i, newTier)
+
 			if list.nodes[i].score < list.lowScore {
 				list.nodes[i].score = list.lowScore
 			}
@@ -242,24 +323,30 @@ func (list *List) Down(upstream Backend) {
 //
 // Default policy is to pick healthy (non-negative score) backend in
 // round-robin fashion.
-func (list *List) Pick() (Backend, error) { //nolint:ireturn
+func (list *List[T]) Pick() (T, error) { //nolint:ireturn
 	list.mu.Lock()
 	defer list.mu.Unlock()
 
-	for j := 0; j < len(list.nodes); j++ {
-		i := (list.current + 1 + j) % len(list.nodes)
+	nodes := list.nodes
 
-		if list.nodes[i].score >= 0 {
-			list.current = i
+	for tier := list.minTier; tier <= list.maxTier; tier++ {
+		for j := range nodes {
+			i := (list.current + 1 + j) % len(nodes)
 
-			return list.nodes[list.current].backend, nil
+			if nodes[i].tier == tier && nodes[i].score >= 0 {
+				list.current = i
+
+				return nodes[list.current].backend, nil
+			}
 		}
 	}
 
-	return nil, ErrNoUpstreams
+	var zero T
+
+	return zero, ErrNoUpstreams
 }
 
-func (list *List) healthcheck() {
+func (list *List[T]) healthcheck(ctx context.Context) {
 	defer list.healthWg.Done()
 
 	ticker := time.NewTicker(list.healthcheckInterval)
@@ -267,31 +354,28 @@ func (list *List) healthcheck() {
 
 	for {
 		list.mu.Lock()
-		nodes := append([]node(nil), list.nodes...)
+		backends := slices.Map(list.nodes, func(n node[T]) T { return n.backend })
 		list.mu.Unlock()
 
-		for _, node := range nodes {
-			select {
-			case <-list.healthCtx.Done():
+		for _, backend := range backends {
+			if ctx.Err() != nil {
 				return
-			default:
 			}
 
 			func() {
-				ctx, ctxCancel := context.WithTimeout(list.healthCtx, list.healthcheckTimeout)
+				localCtx, ctxCancel := context.WithTimeout(ctx, list.healthcheckTimeout)
 				defer ctxCancel()
 
-				if err := node.backend.HealthCheck(ctx); err != nil {
-					list.Down(node.backend)
+				if newTier, err := backend.HealthCheck(localCtx); err != nil {
+					list.downWithTier(backend, newTier)
 				} else {
-					list.Up(node.backend)
+					list.upWithTier(backend, newTier)
 				}
 			}()
 		}
 
-		select {
-		case <-ticker.C:
-		case <-list.healthCtx.Done():
+		_, ok := channel.RecvWithContext(ctx, ticker.C)
+		if !ok {
 			return
 		}
 	}
