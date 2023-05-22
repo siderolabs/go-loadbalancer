@@ -8,11 +8,11 @@ package loadbalancer
 import (
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/siderolabs/gen/slices"
 	"github.com/siderolabs/tcpproxy"
+	"go.uber.org/zap"
 
 	"github.com/siderolabs/go-loadbalancer/upstream"
 )
@@ -28,7 +28,7 @@ import (
 type TCP struct {
 	tcpproxy.Proxy
 
-	Logger *log.Logger
+	Logger *zap.Logger
 
 	routes map[string]*upstream.List[node]
 
@@ -64,7 +64,7 @@ func (t *TCP) IsRouteHealthy(ipPort string) (bool, error) {
 // AddRoute should be called before Start().
 func (t *TCP) AddRoute(ipPort string, upstreamAddrs []string, options ...upstream.ListOption) error {
 	if t.Logger == nil {
-		t.Logger = log.New(log.Writer(), "", log.Flags())
+		t.Logger = zap.Must(zap.NewProduction())
 	}
 
 	if t.routes == nil {

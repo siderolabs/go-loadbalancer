@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -17,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/siderolabs/go-loadbalancer/controlplane"
 )
@@ -78,7 +78,7 @@ func TestLoadBalancer(t *testing.T) {
 		upstreamAddrs[i] = upstreams[i].addr
 	}
 
-	lb, err := controlplane.NewLoadBalancer("localhost", 0, os.Stderr)
+	lb, err := controlplane.NewLoadBalancer("localhost", 0, zaptest.NewLogger(t))
 	require.NoError(t, err)
 
 	upstreamCh := make(chan []string)

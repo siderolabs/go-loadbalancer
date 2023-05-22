@@ -6,14 +6,15 @@ package loadbalancer
 
 import (
 	"context"
-	"log"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/siderolabs/go-loadbalancer/upstream"
 )
 
 type node struct {
-	logger  *log.Logger
+	logger  *zap.Logger
 	address string // host:port
 }
 
@@ -30,7 +31,7 @@ func (upstream node) healthCheck(ctx context.Context) error {
 
 	c, err := d.DialContext(ctx, "tcp", upstream.address)
 	if err != nil {
-		upstream.logger.Printf("healthcheck failed for %q: %s", upstream.address, err)
+		upstream.logger.Info("healthcheck failed", zap.String("address", upstream.address), zap.Error(err))
 
 		return err
 	}

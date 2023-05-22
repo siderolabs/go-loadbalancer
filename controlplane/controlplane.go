@@ -7,11 +7,11 @@ package controlplane
 
 import (
 	"fmt"
-	"io"
-	"log"
 	"net"
 	"strconv"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/siderolabs/go-loadbalancer/loadbalancer"
 	"github.com/siderolabs/go-loadbalancer/upstream"
@@ -61,7 +61,7 @@ func WithHealthCheckOptions(options ...upstream.ListOption) LoadBalancerOption {
 // NewLoadBalancer initializes the load balancer.
 //
 // If bindPort is zero, load balancer will bind to a random available port.
-func NewLoadBalancer(bindAddress string, bindPort int, logWriter io.Writer, options ...LoadBalancerOption) (*LoadBalancer, error) {
+func NewLoadBalancer(bindAddress string, bindPort int, logger *zap.Logger, options ...LoadBalancerOption) (*LoadBalancer, error) {
 	if bindPort == 0 {
 		var err error
 
@@ -84,7 +84,11 @@ func NewLoadBalancer(bindAddress string, bindPort int, logWriter io.Writer, opti
 		option(lb)
 	}
 
-	lb.lb.Logger = log.New(logWriter, lb.endpoint+" ", log.Default().Flags())
+	if logger == nil {
+		logger = zap.Must(zap.NewProduction())
+	}
+
+	lb.lb.Logger = logger.Named("controlplane-lb").With(zap.String("endpoint", lb.endpoint))
 
 	// create a route without any upstreams yet
 	if err := lb.lb.AddRoute(lb.endpoint, nil, lb.healthCheckOptions...); err != nil {
@@ -114,7 +118,10 @@ func (lb *LoadBalancer) Start(upstreamCh <-chan []string) error {
 			select {
 			case upstreams := <-upstreamCh:
 				if err := lb.lb.ReconcileRoute(lb.endpoint, upstreams); err != nil {
-					lb.lb.Logger.Printf("failed reconciling list of upstreams: %s", err)
+					lb.lb.Logger.Info("failed reconciling list of upstreams",
+						zap.Strings("upstreams", upstreams),
+						zap.Error(err),
+					)
 				}
 			case <-lb.done:
 				return

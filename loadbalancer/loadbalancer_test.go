@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/goleak"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/siderolabs/go-loadbalancer/loadbalancer"
 	"github.com/siderolabs/go-loadbalancer/upstream"
@@ -93,7 +94,7 @@ func (suite *TCPSuite) TestReconcile() {
 	listenAddr, err := findListenAddress()
 	suite.Require().NoError(err)
 
-	lb := &loadbalancer.TCP{}
+	lb := &loadbalancer.TCP{Logger: zaptest.NewLogger(suite.T())}
 	suite.Require().NoError(lb.AddRoute(
 		listenAddr,
 		upstreamAddrs[:pivot],
@@ -192,7 +193,7 @@ func (suite *TCPSuite) TestBalancer() {
 	listenAddr, err := findListenAddress()
 	suite.Require().NoError(err)
 
-	lb := &loadbalancer.TCP{}
+	lb := &loadbalancer.TCP{Logger: zaptest.NewLogger(suite.T())}
 	suite.Require().NoError(lb.AddRoute(
 		listenAddr,
 		upstreamAddrs,
