@@ -118,7 +118,7 @@ func (lb *LoadBalancer) Start(upstreamCh <-chan []string) error {
 			select {
 			case upstreams := <-upstreamCh:
 				if err := lb.lb.ReconcileRoute(lb.endpoint, upstreams); err != nil {
-					lb.lb.Logger.Info("failed reconciling list of upstreams",
+					lb.lb.Logger.Warn("failed reconciling list of upstreams",
 						zap.Strings("upstreams", upstreams),
 						zap.Error(err),
 					)

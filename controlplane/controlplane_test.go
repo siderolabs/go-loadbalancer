@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/siderolabs/gen/slices"
 	"github.com/siderolabs/go-retry/retry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,13 +20,16 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"github.com/siderolabs/go-loadbalancer/controlplane"
+	"github.com/siderolabs/go-loadbalancer/upstream"
 )
 
+//nolint:govet
 type mockUpstream struct {
+	T        testing.TB
+	Identity string
+
 	addr string
 	l    net.Listener
-
-	identity string
 }
 
 func (u *mockUpstream) Start() error {
@@ -50,13 +54,14 @@ func (u *mockUpstream) serve() {
 			return
 		}
 
-		c.Write([]byte(u.identity)) //nolint: errcheck
-		c.Close()                   //nolint: errcheck
+		_, err = c.Write([]byte(u.Identity))
+		require.NoError(u.T, err)
+		require.NoError(u.T, c.Close())
 	}
 }
 
 func (u *mockUpstream) Close() {
-	u.l.Close() //nolint: errcheck
+	require.NoError(u.T, u.l.Close())
 }
 
 func TestLoadBalancer(t *testing.T) {
@@ -69,16 +74,24 @@ func TestLoadBalancer(t *testing.T) {
 
 	upstreams := make([]mockUpstream, upstreamCount)
 	for i := range upstreams {
-		upstreams[i].identity = strconv.Itoa(i)
+		upstreams[i].T = t
+		upstreams[i].Identity = strconv.Itoa(i)
 		require.NoError(t, upstreams[i].Start())
 	}
 
-	upstreamAddrs := make([]string, len(upstreams))
-	for i := range upstreamAddrs {
-		upstreamAddrs[i] = upstreams[i].addr
-	}
+	upstreamAddrs := slices.Map(upstreams, func(u mockUpstream) string { return u.addr })
 
-	lb, err := controlplane.NewLoadBalancer("localhost", 0, zaptest.NewLogger(t))
+	lb, err := controlplane.NewLoadBalancer(
+		"localhost",
+		0,
+		zaptest.NewLogger(t),
+		controlplane.WithHealthCheckOptions(
+			// start with negative initlal score so that every healthcheck will be performed
+			// at least once. It will also make upstream tiers.
+			upstream.WithInitialScore(-1),
+			upstream.WithHealthcheckInterval(10*time.Millisecond),
+		),
+	)
 	require.NoError(t, err)
 
 	upstreamCh := make(chan []string)
@@ -93,17 +106,19 @@ func TestLoadBalancer(t *testing.T) {
 			return 0, retry.ExpectedError(err)
 		}
 
-		defer c.Close() //nolint:errcheck
+		defer ensure(t, c.Close)
 
 		id, err := io.ReadAll(c)
 		if err != nil {
 			return 0, retry.ExpectedError(err)
+		} else if len(id) == 0 {
+			return 0, retry.ExpectedErrorf("zero length response")
 		}
 
 		return strconv.Atoi(string(id))
 	}
 
-	assert.NoError(t, retry.Constant(10*time.Second, retry.WithUnits(time.Second)).Retry(func() error {
+	assert.NoError(t, retry.Constant(10*time.Second, retry.WithUnits(30*time.Millisecond)).Retry(func() error {
 		identity, err := readIdentity()
 		if err != nil {
 			return err
@@ -169,4 +184,8 @@ func TestLoadBalancer(t *testing.T) {
 	}
 
 	assert.NoError(t, lb.Shutdown())
+}
+
+func ensure(t *testing.T, closer func() error) {
+	require.NoError(t, closer())
 }

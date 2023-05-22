@@ -31,7 +31,7 @@ func (upstream node) healthCheck(ctx context.Context) error {
 
 	c, err := d.DialContext(ctx, "tcp", upstream.address)
 	if err != nil {
-		upstream.logger.Info("healthcheck failed", zap.String("address", upstream.address), zap.Error(err))
+		upstream.logger.Warn("healthcheck failed", zap.String("address", upstream.address), zap.Error(err))
 
 		return err
 	}

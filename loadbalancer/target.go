@@ -25,11 +25,18 @@ type lbTarget struct {
 func (target *lbTarget) HandleConn(conn net.Conn) {
 	upstreamBackend, err := target.list.Pick()
 	if err != nil {
-		target.logger.Info(
+		target.logger.Warn(
 			"no upstreams available, closing connection",
 			zap.String("remote_addr", conn.RemoteAddr().String()),
 		)
-		conn.Close() //nolint: errcheck
+
+		if closeErr := conn.Close(); closeErr != nil {
+			target.logger.Warn(
+				"error closing connection",
+				zap.String("remote_addr", conn.RemoteAddr().String()),
+				zap.Error(closeErr),
+			)
+		}
 
 		return
 	}
@@ -45,9 +52,15 @@ func (target *lbTarget) HandleConn(conn net.Conn) {
 	upstreamTarget.KeepAlivePeriod = target.keepAlivePeriod
 	upstreamTarget.TCPUserTimeout = target.tcpUserTimeout
 	upstreamTarget.OnDialError = func(src net.Conn, dstDialErr error) {
-		src.Close() //nolint: errcheck
+		if err := src.Close(); err != nil {
+			target.logger.Warn(
+				"error closing connection",
+				zap.String("remote_addr", src.RemoteAddr().String()),
+				zap.Error(err),
+			)
+		}
 
-		target.logger.Info(
+		target.logger.Warn(
 			"error dialing upstream",
 			zap.String("upstream_addr", upstreamBackend.address),
 			zap.Error(dstDialErr),
