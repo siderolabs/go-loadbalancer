@@ -1,3 +1,4 @@
+github.com/armon/go-proxyproto v0.0.0-20210323213023-7e956b284f0a/go.mod h1:QmP9hvJ91BbJmGVGSbutW19IC0Q9phDCLGaomwTJbgU=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -10,8 +11,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/siderolabs/go-retry v0.3.2 h1:FzWslFm4y8RY1wU0gIskm0oZHOpsSibZqlR8N8/k4Eo=
 github.com/siderolabs/go-retry v0.3.2/go.mod h1:Ac8HIh0nAYDQm04FGZHNofVAXteyd4xR9oujTRrtvK0=
-github.com/smira/tcpproxy v0.0.0-20201015133617-de5f7797b95b h1:95WXQlM2dDPgIXTlnpwiJPa0l0ipl1RwMvdy8KLUyH8=
-github.com/smira/tcpproxy v0.0.0-20201015133617-de5f7797b95b/go.mod h1:yDIWrelwlTRXdKvQqqQ+8lCwCjbSRtkat49REnui7hk=
+github.com/siderolabs/tcpproxy v0.1.0 h1:IbkS9vRhjMOscc1US3M5P1RnsGKFgB6U5IzUk+4WkKA=
+github.com/siderolabs/tcpproxy v0.1.0/go.mod h1:onn6CPPj/w1UNqQ0U97oRPF0CqbrgEApYCw4P9IiCW8=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.4.0/go.mod h1:YvHI0jy2hoMjB+UWwv71VJQ9isScKT/TqJzVSSt89Yw=
 github.com/stretchr/objx v0.5.0/go.mod h1:Yh+to48EsGEfYuaHDzXPcE3xhTkx73EhmCGUpEOglKo=

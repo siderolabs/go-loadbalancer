@@ -9,7 +9,7 @@ import (
 	"net"
 	"time"
 
-	"inet.af/tcpproxy"
+	"github.com/siderolabs/tcpproxy"
 
 	"github.com/siderolabs/go-loadbalancer/upstream"
 )

@@ -2,13 +2,11 @@ module github.com/siderolabs/go-loadbalancer
 
 go 1.20
 
-replace inet.af/tcpproxy => github.com/smira/tcpproxy v0.0.0-20201015133617-de5f7797b95b
-
 require (
 	github.com/siderolabs/go-retry v0.3.2
+	github.com/siderolabs/tcpproxy v0.1.0
 	github.com/stretchr/testify v1.8.2
 	go.uber.org/goleak v1.2.1
-	inet.af/tcpproxy v0.0.0-20221017015627-91f861402626
 )
 
 require (
