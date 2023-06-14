@@ -40,7 +40,8 @@ func (upstream node) healthCheck(ctx context.Context) error {
 }
 
 var mins = []time.Duration{
-	0, time.Millisecond,
+	0,
+	time.Millisecond / 10,
 	time.Millisecond,
 	10 * time.Millisecond,
 	100 * time.Millisecond,

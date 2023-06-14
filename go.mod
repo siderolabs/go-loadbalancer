@@ -6,7 +6,7 @@ require (
 	github.com/siderolabs/gen v0.4.5
 	github.com/siderolabs/go-retry v0.3.2
 	github.com/siderolabs/tcpproxy v0.1.0
-	github.com/stretchr/testify v1.8.3
+	github.com/stretchr/testify v1.8.4
 	go.uber.org/goleak v1.2.1
 	go.uber.org/zap v1.24.0
 )

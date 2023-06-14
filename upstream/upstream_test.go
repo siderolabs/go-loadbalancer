@@ -271,7 +271,7 @@ func (suite *ListSuite) TestBalancing() {
 		upstream.WithScoreDeltas(-1, 1),
 		upstream.WithHealthcheckInterval(10*time.Microsecond),
 		upstream.WithHealthcheckTimeout(time.Hour),
-		upstream.WithTiers(0, 4, 1),
+		upstream.WithTiers(0, 5, 1),
 	)
 	suite.Require().NoError(lerr)
 
