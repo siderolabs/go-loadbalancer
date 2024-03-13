@@ -38,6 +38,7 @@ func Test_calcTier(t *testing.T) {
 
 				return
 			}
+
 			if got != tt.want {
 				t.Errorf("calcTier() got = %v, want %v", got, tt.want)
 			}

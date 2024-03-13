@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/siderolabs/gen/slices"
+	"github.com/siderolabs/gen/xslices"
 	"github.com/siderolabs/go-retry/retry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -79,7 +79,7 @@ func TestLoadBalancer(t *testing.T) {
 		require.NoError(t, upstreams[i].Start())
 	}
 
-	upstreamAddrs := slices.Map(upstreams, func(u mockUpstream) string { return u.addr })
+	upstreamAddrs := xslices.Map(upstreams, func(u mockUpstream) string { return u.addr })
 
 	lb, err := controlplane.NewLoadBalancer(
 		"localhost",

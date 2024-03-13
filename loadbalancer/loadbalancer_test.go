@@ -156,6 +156,7 @@ func (suite *TCPSuite) TestReconcile() {
 
 		suite.Assert().Less(no, int64(upstreamCount))
 		suite.Assert().GreaterOrEqual(no, int64(pivot))
+
 		upstreamsUsed[no]++
 
 		suite.Require().NoError(c.Close())
@@ -258,6 +259,7 @@ func (suite *TCPSuite) TestBalancer() {
 
 		// load balancer should go round-robin across all the upstreams
 		suite.Assert().Equal([]byte(strconv.Itoa(j%upstreamCount)), id)
+
 		j++
 
 		suite.Require().NoError(c.Close())

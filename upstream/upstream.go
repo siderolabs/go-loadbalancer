@@ -9,11 +9,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
-	"github.com/siderolabs/gen/channel"
-	"github.com/siderolabs/gen/slices"
+	"github.com/siderolabs/gen/xslices"
 )
 
 // ErrNoUpstreams is returned from Pick method, when there are no upstreams available.
@@ -209,7 +209,7 @@ func NewListWithCmp[T Backend](upstreams []T, cmp func(T, T) bool, options ...Li
 		}
 	}
 
-	list.nodes = slices.Map(upstreams, func(b T) node[T] {
+	list.nodes = xslices.Map(upstreams, func(b T) node[T] {
 		return node[T]{
 			backend: b,
 			score:   list.initialScore,
@@ -234,7 +234,7 @@ func (list *List[T]) Reconcile(upstreams []T) {
 	list.mu.Lock()
 	defer list.mu.Unlock()
 
-	list.nodes = slices.FilterInPlace(list.nodes, func(b node[T]) bool {
+	list.nodes = xslices.FilterInPlace(list.nodes, func(b node[T]) bool {
 		idx := slices.IndexFunc(toAdd, func(u T) bool { return list.cmp(u, b.backend) })
 		if idx == -1 {
 			// backend doesn't exist in new upstreams, remove from current node list
@@ -354,7 +354,7 @@ func (list *List[T]) healthcheck(ctx context.Context) {
 
 	for {
 		list.mu.Lock()
-		backends := slices.Map(list.nodes, func(n node[T]) T { return n.backend })
+		backends := xslices.Map(list.nodes, func(n node[T]) T { return n.backend })
 		list.mu.Unlock()
 
 		for _, backend := range backends {
@@ -374,9 +374,10 @@ func (list *List[T]) healthcheck(ctx context.Context) {
 			}()
 		}
 
-		_, ok := channel.RecvWithContext(ctx, ticker.C)
-		if !ok {
+		select {
+		case <-ctx.Done():
 			return
+		case <-ticker.C:
 		}
 	}
 }

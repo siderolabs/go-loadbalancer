@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/siderolabs/gen/slices"
+	"github.com/siderolabs/gen/xslices"
 	"github.com/siderolabs/go-retry/retry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -299,7 +299,7 @@ func (suite *ListSuite) TestBalancing() {
 
 		seen[backend.name] = struct{}{}
 	}
-	suite.Assert().Equal(slices.ToSet([]string{"two", "three"}), seen)
+	suite.Assert().Equal(xslices.ToSet([]string{"two", "three"}), seen)
 
 	// Decrease score of two
 	// score 1 --> -3
@@ -354,7 +354,7 @@ func (suite *ListSuite) TestBalancing() {
 
 		seen[backend.name] = struct{}{}
 	}
-	suite.Assert().Equal(slices.ToSet([]string{"two", "three"}), seen)
+	suite.Assert().Equal(xslices.ToSet([]string{"two", "three"}), seen)
 
 	// Move three to zero tier
 	waitForUpdate(suite.T(), bc.SetBackend("three", 0, nil), 0)
@@ -390,7 +390,7 @@ func (suite *ListSuite) TestBalancing() {
 		seen[backend.name] = struct{}{}
 	}
 
-	suite.Assert().Equal(slices.ToSet([]string{"one", "three"}), seen)
+	suite.Assert().Equal(xslices.ToSet([]string{"one", "three"}), seen)
 
 	// Move two to zero tier
 	waitForUpdate(suite.T(), bc.SetBackend("two", 0, nil), 1)
@@ -404,7 +404,7 @@ func (suite *ListSuite) TestBalancing() {
 
 		seen[backend.name] = struct{}{}
 	}
-	suite.Assert().Equal(slices.ToSet([]string{"one", "two", "three"}), seen)
+	suite.Assert().Equal(xslices.ToSet([]string{"one", "two", "three"}), seen)
 
 	// Reconcile
 	l.Reconcile([]*customBackend{
@@ -423,7 +423,7 @@ func (suite *ListSuite) TestBalancing() {
 		seen[backend.name] = struct{}{}
 	}
 
-	suite.Assert().Equal(slices.ToSet([]string{"one", "two"}), seen)
+	suite.Assert().Equal(xslices.ToSet([]string{"one", "two"}), seen)
 
 	// Move one and two to first tier
 	waitForUpdate(suite.T(), bc.SetBackend("one", 1, nil), 1)
@@ -439,7 +439,7 @@ func (suite *ListSuite) TestBalancing() {
 		seen[backend.name] = struct{}{}
 	}
 
-	suite.Assert().Equal(slices.ToSet([]string{"one", "two", "four"}), seen)
+	suite.Assert().Equal(xslices.ToSet([]string{"one", "two", "four"}), seen)
 
 	// Reconcile
 	l.Reconcile([]*customBackend{
@@ -458,7 +458,7 @@ func (suite *ListSuite) TestBalancing() {
 		seen[backend.name] = struct{}{}
 	}
 
-	suite.Assert().Equal(slices.ToSet([]string{"one", "five", "six"}), seen)
+	suite.Assert().Equal(xslices.ToSet([]string{"one", "five", "six"}), seen)
 
 	// Move one to second tier
 	waitForUpdate(suite.T(), bc.SetBackend("one", 2, nil), 1)
@@ -480,7 +480,7 @@ func (suite *ListSuite) TestBalancing() {
 		seen[backend.name] = struct{}{}
 	}
 
-	suite.Assert().Equal(slices.ToSet([]string{"seven", "eight"}), seen)
+	suite.Assert().Equal(xslices.ToSet([]string{"seven", "eight"}), seen)
 }
 
 func waitForUpdate(t *testing.T, backend *customBackend, times int64) {

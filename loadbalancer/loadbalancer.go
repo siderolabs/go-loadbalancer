@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/siderolabs/gen/slices"
+	"github.com/siderolabs/gen/xslices"
 	"github.com/siderolabs/tcpproxy"
 	"go.uber.org/zap"
 
@@ -71,7 +71,7 @@ func (t *TCP) AddRoute(ipPort string, upstreamAddrs []string, options ...upstrea
 		t.routes = make(map[string]*upstream.List[node])
 	}
 
-	upstreams := slices.Map(upstreamAddrs, func(addr string) node {
+	upstreams := xslices.Map(upstreamAddrs, func(addr string) node {
 		return node{
 			address: addr,
 			logger:  t.Logger,
@@ -114,7 +114,7 @@ func (t *TCP) ReconcileRoute(ipPort string, upstreamAddrs []string) error {
 		return fmt.Errorf("handler not registered for %q", ipPort)
 	}
 
-	upstreams := slices.Map(upstreamAddrs, func(addr string) node {
+	upstreams := xslices.Map(upstreamAddrs, func(addr string) node {
 		return node{
 			address: addr,
 			logger:  t.Logger,
