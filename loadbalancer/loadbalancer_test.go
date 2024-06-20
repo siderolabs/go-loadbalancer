@@ -118,7 +118,7 @@ func (suite *TCPSuite) TestReconcile() {
 		lb.Wait() //nolint: errcheck
 	}()
 
-	for i := 0; i < 5*pivot; i++ {
+	for i := range 5 * pivot {
 		c, err := net.Dial("tcp", listenAddr)
 		suite.Require().NoError(err)
 
@@ -135,13 +135,13 @@ func (suite *TCPSuite) TestReconcile() {
 	suite.Require().NoError(lb.ReconcileRoute(listenAddr, upstreamAddrs[pivot:]))
 
 	// bring down pre-pivot upstreams
-	for i := 0; i < pivot; i++ {
+	for i := range pivot {
 		upstreams[i].Close()
 	}
 
 	upstreamsUsed := map[int64]int{}
 
-	for i := 0; i < 10*(upstreamCount-pivot); i++ {
+	for i := range 10 * (upstreamCount - pivot) {
 		c, err := net.Dial("tcp", listenAddr)
 		suite.Require().NoError(err)
 
@@ -218,7 +218,7 @@ func (suite *TCPSuite) TestBalancer() {
 		lb.Wait() //nolint: errcheck
 	}()
 
-	for i := 0; i < 2*upstreamCount; i++ {
+	for i := range 2 * upstreamCount {
 		c, err := net.Dial("tcp", listenAddr)
 		suite.Require().NoError(err)
 
@@ -237,7 +237,7 @@ func (suite *TCPSuite) TestBalancer() {
 	j := 0
 	failedRequests := 0
 
-	for i := 0; i < 10*upstreamCount; i++ {
+	for range 10 * upstreamCount {
 		c, err := net.Dial("tcp", listenAddr)
 		suite.Require().NoError(err)
 

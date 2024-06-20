@@ -169,7 +169,7 @@ func (suite *ListSuite) TestHealthcheck() {
 
 	// when health info converges, "success" should be the only backend left
 	suite.Require().NoError(retry.Constant(time.Second, retry.WithUnits(time.Millisecond)).Retry(func() error {
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			backend, err := l.Pick()
 			if err != nil {
 				return err
@@ -281,7 +281,7 @@ func (suite *ListSuite) TestBalancing() {
 	waitForUpdate(suite.T(), bc.SetBackend("one", 0, nil), 1)
 
 	// Should always pick one
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		backend, err := l.Pick()
 		suite.Assert().NoError(err)
 		suite.Assert().Equal("one", backend.name)
@@ -293,12 +293,13 @@ func (suite *ListSuite) TestBalancing() {
 	// Should always pick two or three
 	seen := map[string]struct{}{}
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		backend, err := l.Pick()
 		suite.Assert().NoError(err)
 
 		seen[backend.name] = struct{}{}
 	}
+
 	suite.Assert().Equal(xslices.ToSet([]string{"two", "three"}), seen)
 
 	// Decrease score of two
@@ -306,7 +307,7 @@ func (suite *ListSuite) TestBalancing() {
 	waitForUpdate(suite.T(), bc.SetBackend("two", -1, errors.New("fail")), 4)
 
 	// Should always pick three
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		backend, err := l.Pick()
 		suite.Assert().Equal("three", backend.name)
 		suite.Assert().NoError(err)
@@ -316,7 +317,7 @@ func (suite *ListSuite) TestBalancing() {
 	waitForUpdate(suite.T(), bc.SetBackend("three", -1, errors.New("fail")), 4)
 
 	// Should always pick one
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		backend, err := l.Pick()
 		suite.Assert().NoError(err)
 		suite.Assert().Equal("one", backend.name)
@@ -335,7 +336,7 @@ func (suite *ListSuite) TestBalancing() {
 	waitForUpdate(suite.T(), bc.SetBackend("two", -1, nil), 4)
 
 	// Should always pick two
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		backend, err := l.Pick()
 		suite.Assert().Equal("two", backend.name)
 		suite.Assert().NoError(err)
@@ -348,19 +349,20 @@ func (suite *ListSuite) TestBalancing() {
 	// Should always pick two or three
 	seen = map[string]struct{}{}
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		backend, err := l.Pick()
 		suite.Assert().NoError(err)
 
 		seen[backend.name] = struct{}{}
 	}
+
 	suite.Assert().Equal(xslices.ToSet([]string{"two", "three"}), seen)
 
 	// Move three to zero tier
 	waitForUpdate(suite.T(), bc.SetBackend("three", 0, nil), 0)
 
 	// Should always pick three
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		backend, err := l.Pick()
 		suite.Assert().Equal("three", backend.name)
 		suite.Assert().NoError(err)
@@ -371,7 +373,7 @@ func (suite *ListSuite) TestBalancing() {
 	waitForUpdate(suite.T(), bc.SetBackend("one", -1, nil), 4)
 
 	// Still should always pick three
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		backend, err := l.Pick()
 		suite.Assert().Equal("three", backend.name)
 		suite.Assert().NoError(err)
@@ -383,7 +385,7 @@ func (suite *ListSuite) TestBalancing() {
 	// Should always pick one or three
 	seen = map[string]struct{}{}
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		backend, err := l.Pick()
 		suite.Assert().NoError(err)
 
@@ -398,12 +400,13 @@ func (suite *ListSuite) TestBalancing() {
 	// Should pick all three
 	seen = map[string]struct{}{}
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		backend, err := l.Pick()
 		suite.Assert().NoError(err)
 
 		seen[backend.name] = struct{}{}
 	}
+
 	suite.Assert().Equal(xslices.ToSet([]string{"one", "two", "three"}), seen)
 
 	// Reconcile
@@ -416,7 +419,7 @@ func (suite *ListSuite) TestBalancing() {
 	// Should pick one or two
 	seen = map[string]struct{}{}
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		backend, err := l.Pick()
 		suite.Assert().NoError(err)
 
@@ -432,7 +435,7 @@ func (suite *ListSuite) TestBalancing() {
 	// Should pick all three
 	seen = map[string]struct{}{}
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		backend, err := l.Pick()
 		suite.Assert().NoError(err)
 
@@ -451,7 +454,7 @@ func (suite *ListSuite) TestBalancing() {
 	// Should pick all three
 	seen = map[string]struct{}{}
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		backend, err := l.Pick()
 		suite.Assert().NoError(err)
 
@@ -473,7 +476,7 @@ func (suite *ListSuite) TestBalancing() {
 	// Should pick seven or eight
 	seen = map[string]struct{}{}
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		backend, err := l.Pick()
 		suite.Assert().NoError(err)
 
