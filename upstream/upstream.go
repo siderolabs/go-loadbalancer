@@ -9,10 +9,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"slices"
 	"sync"
 	"time"
 
+	"github.com/siderolabs/gen/xiter"
 	"github.com/siderolabs/gen/xslices"
 )
 
@@ -43,15 +45,12 @@ type ListOption func(*ListConfig) error
 // WithLowHighScores configures low and high score.
 func WithLowHighScores(lowScore, highScore float64) ListOption {
 	return func(l *ListConfig) error {
-		if l.lowScore > 0 {
+		switch {
+		case lowScore > 0:
 			return fmt.Errorf("lowScore should be non-positive")
-		}
-
-		if l.highScore < 0 {
+		case highScore < 0:
 			return fmt.Errorf("highScore should be non-positive")
-		}
-
-		if l.lowScore > l.highScore {
+		case lowScore > highScore:
 			return fmt.Errorf("lowScore should be less or equal to highScore")
 		}
 
@@ -64,11 +63,10 @@ func WithLowHighScores(lowScore, highScore float64) ListOption {
 // WithScoreDeltas configures fail and success score delta.
 func WithScoreDeltas(failScoreDelta, successScoreDelta float64) ListOption {
 	return func(l *ListConfig) error {
-		if l.failScoreDelta >= 0 {
+		switch {
+		case failScoreDelta >= 0:
 			return fmt.Errorf("failScoreDelta should be negative")
-		}
-
-		if l.successScoreDelta <= 0 {
+		case successScoreDelta <= 0:
 			return fmt.Errorf("successScoreDelta should be positive")
 		}
 
@@ -109,20 +107,20 @@ func WithHealthcheckTimeout(timeout time.Duration) ListOption {
 type Tier int
 
 // WithTiers configures backend tier min, max, and start.
-func WithTiers(min, max, init Tier) ListOption {
+func WithTiers(minTier, maxTier, initTier Tier) ListOption {
 	return func(l *ListConfig) error {
 		switch {
-		case min < 0 || max < 0 || init < 0:
+		case minTier < 0 || maxTier < 0 || initTier < 0:
 			return errors.New("min, max and init tiers should be non-negative")
-		case min > max:
+		case minTier > maxTier:
 			return errors.New("min tier should be less or equal to max tier")
-		case init < min || init > max:
+		case initTier < minTier || initTier > maxTier:
 			return errors.New("init tier should be between min and max tier")
-		case min > 10 || max > 10 || init > 10:
+		case minTier > 10 || maxTier > 10 || initTier > 10:
 			return errors.New("min, max and init tiers should be less or equal to 10")
 		}
 
-		l.initTier, l.minTier, l.maxTier = init, min, max
+		l.initTier, l.minTier, l.maxTier = initTier, minTier, maxTier
 
 		return nil
 	}
@@ -171,14 +169,14 @@ type listConfig = ListConfig
 // NewList initializes new list with upstream backends and options and starts health checks. It uses
 //
 // List should be stopped with `.Shutdown()`.
-func NewList[T BackendCmp](upstreams []T, options ...ListOption) (*List[T], error) {
+func NewList[T BackendCmp](upstreams iter.Seq[T], options ...ListOption) (*List[T], error) {
 	return NewListWithCmp[T](upstreams, func(a, b T) bool { return a == b }, options...)
 }
 
 // NewListWithCmp initializes new list with upstream backends and options and starts health checks.
 //
 // List should be stopped with `.Shutdown()`.
-func NewListWithCmp[T Backend](upstreams []T, cmp func(T, T) bool, options ...ListOption) (*List[T], error) {
+func NewListWithCmp[T Backend](upstreams iter.Seq[T], cmp func(T, T) bool, options ...ListOption) (*List[T], error) {
 	// initialize with defaults
 	list := &List[T]{
 		listConfig: listConfig{
@@ -209,13 +207,17 @@ func NewListWithCmp[T Backend](upstreams []T, cmp func(T, T) bool, options ...Li
 		}
 	}
 
-	list.nodes = xslices.Map(upstreams, func(b T) node[T] {
+	if upstreams == nil {
+		upstreams = xiter.Empty[T]
+	}
+
+	list.nodes = slices.Collect(xiter.Map(func(b T) node[T] {
 		return node[T]{
 			backend: b,
 			score:   list.initialScore,
 			tier:    list.initTier,
 		}
-	})
+	}, upstreams))
 
 	list.healthWg.Add(1)
 
@@ -228,26 +230,26 @@ func NewListWithCmp[T Backend](upstreams []T, cmp func(T, T) bool, options ...Li
 //
 // Any new backends are added with initial score, score is untouched
 // for backends which haven't changed their score.
-func (list *List[T]) Reconcile(upstreams []T) {
-	toAdd := slices.Clone(upstreams)
-
+func (list *List[T]) Reconcile(toAdd iter.Seq[T]) {
 	list.mu.Lock()
 	defer list.mu.Unlock()
 
+	if toAdd == nil {
+		toAdd = xiter.Empty[T]
+	}
+
 	list.nodes = xslices.FilterInPlace(list.nodes, func(b node[T]) bool {
-		idx := slices.IndexFunc(toAdd, func(u T) bool { return list.cmp(u, b.backend) })
-		if idx == -1 {
-			// backend doesn't exist in new upstreams, remove from current node list
-			return false
-		}
+		_, ok := xiter.Find(func(u T) bool { return list.cmp(u, b.backend) }, toAdd)
 
-		// backend exists, remove from toAdd slice, preserve in current node list
-		toAdd = append(toAdd[:idx], toAdd[idx+1:]...)
-
-		return true
+		return ok // if not ok, backend doesn't exist in new upstreams, remove from current node list
 	})
 
-	for _, newB := range toAdd {
+	for newB := range toAdd {
+		if slices.ContainsFunc(list.nodes, func(b node[T]) bool { return list.cmp(newB, b.backend) }) {
+			// if backend exists, remove from toAdd slice, preserve in current node list
+			continue
+		}
+
 		list.nodes = append(list.nodes, node[T]{
 			backend: newB,
 			score:   list.initialScore,

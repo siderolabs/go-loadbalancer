@@ -7,6 +7,7 @@ package loadbalancer_test
 import (
 	"io"
 	"net"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
@@ -97,7 +98,7 @@ func (suite *TCPSuite) TestReconcile() {
 	lb := &loadbalancer.TCP{Logger: zaptest.NewLogger(suite.T())}
 	suite.Require().NoError(lb.AddRoute(
 		listenAddr,
-		upstreamAddrs[:pivot],
+		slices.Values(upstreamAddrs[:pivot]),
 		upstream.WithLowHighScores(-3, 3),
 		upstream.WithInitialScore(1),
 		upstream.WithScoreDeltas(-1, 1),
@@ -132,7 +133,7 @@ func (suite *TCPSuite) TestReconcile() {
 	}
 
 	// reconcile the list
-	suite.Require().NoError(lb.ReconcileRoute(listenAddr, upstreamAddrs[pivot:]))
+	suite.Require().NoError(lb.ReconcileRoute(listenAddr, slices.Values(upstreamAddrs[pivot:])))
 
 	// bring down pre-pivot upstreams
 	for i := range pivot {
@@ -197,7 +198,7 @@ func (suite *TCPSuite) TestBalancer() {
 	lb := &loadbalancer.TCP{Logger: zaptest.NewLogger(suite.T())}
 	suite.Require().NoError(lb.AddRoute(
 		listenAddr,
-		upstreamAddrs,
+		slices.Values(upstreamAddrs),
 		upstream.WithLowHighScores(-3, 3),
 		upstream.WithInitialScore(1),
 		upstream.WithScoreDeltas(-1, 1),

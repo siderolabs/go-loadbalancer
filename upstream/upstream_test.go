@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -53,7 +54,7 @@ func (suite *ListSuite) TestEmpty() {
 }
 
 func (suite *ListSuite) TestRoundRobin() {
-	l, err := upstream.NewList([]upstream.Backend{mockBackend("one"), mockBackend("two"), mockBackend("three")})
+	l, err := upstream.NewList(slices.Values([]upstream.Backend{mockBackend("one"), mockBackend("two"), mockBackend("three")}))
 	suite.Require().NoError(err)
 
 	defer l.Shutdown()
@@ -77,7 +78,7 @@ func (suite *ListSuite) TestRoundRobin() {
 
 func (suite *ListSuite) TestDownUp() {
 	l, err := upstream.NewList(
-		[]mockBackend{"one", "two", "three"},
+		slices.Values([]mockBackend{"one", "two", "three"}),
 		upstream.WithLowHighScores(-3, 3),
 		upstream.WithInitialScore(1),
 		upstream.WithScoreDeltas(-1, 1),
@@ -154,7 +155,7 @@ func (suite *ListSuite) TestDownUp() {
 
 func (suite *ListSuite) TestHealthcheck() {
 	l, err := upstream.NewList(
-		[]mockBackend{"success", "fail", "timeout"},
+		slices.Values([]mockBackend{"success", "fail", "timeout"}),
 		upstream.WithLowHighScores(-1, 1),
 		upstream.WithInitialScore(1),
 		upstream.WithScoreDeltas(-1, 1),
@@ -186,7 +187,7 @@ func (suite *ListSuite) TestHealthcheck() {
 
 func (suite *ListSuite) TestReconcile() {
 	l, err := upstream.NewList(
-		[]mockBackend{"one", "two", "three"},
+		slices.Values([]mockBackend{"one", "two", "three"}),
 		upstream.WithLowHighScores(-3, 3),
 		upstream.WithInitialScore(1),
 		upstream.WithScoreDeltas(-1, 1),
@@ -200,19 +201,19 @@ func (suite *ListSuite) TestReconcile() {
 	suite.Assert().Equal(mockBackend("one"), backend)
 	suite.Assert().NoError(err)
 
-	l.Reconcile([]mockBackend{"one", "two", "three"})
+	l.Reconcile(slices.Values([]mockBackend{"one", "two", "three"}))
 
 	backend, err = l.Pick()
 	suite.Assert().Equal(mockBackend("two"), backend)
 	suite.Assert().NoError(err)
 
-	l.Reconcile([]mockBackend{"one", "two", "four"})
+	l.Reconcile(slices.Values([]mockBackend{"one", "two", "four"}))
 
 	backend, err = l.Pick()
 	suite.Assert().Equal(mockBackend("four"), backend)
 	suite.Assert().NoError(err)
 
-	l.Reconcile([]mockBackend{"five", "six", "four"})
+	l.Reconcile(slices.Values([]mockBackend{"five", "six", "four"}))
 
 	backend, err = l.Pick()
 	suite.Assert().Equal(mockBackend("four"), backend)
@@ -239,7 +240,7 @@ func (suite *ListSuite) TestReconcile() {
 	suite.Assert().Equal(mockBackend("six"), backend)
 	suite.Assert().NoError(err)
 
-	l.Reconcile([]mockBackend{"five", "six", "four"})
+	l.Reconcile(slices.Values([]mockBackend{"five", "six", "four"}))
 
 	backend, err = l.Pick()
 	suite.Assert().Equal(mockBackend("five"), backend)
@@ -260,11 +261,11 @@ func (suite *ListSuite) TestBalancing() {
 	var bc backendControl
 
 	l, lerr := upstream.NewListWithCmp(
-		[]*customBackend{
+		slices.Values([]*customBackend{
 			bc.SetBackend("one", 1, nil),
 			bc.SetBackend("two", 1, nil),
 			bc.SetBackend("three", 1, nil),
-		},
+		}),
 		func(a, b *customBackend) bool { return a.name == b.name },
 		upstream.WithLowHighScores(-3, 3),
 		upstream.WithInitialScore(1),
@@ -410,11 +411,11 @@ func (suite *ListSuite) TestBalancing() {
 	suite.Assert().Equal(xslices.ToSet([]string{"one", "two", "three"}), seen)
 
 	// Reconcile
-	l.Reconcile([]*customBackend{
+	l.Reconcile(slices.Values([]*customBackend{
 		bc.GetBackend("one"),
 		bc.GetBackend("two"),
 		bc.SetBackend("four", 1, nil),
-	})
+	}))
 
 	// Should pick one or two
 	seen = map[string]struct{}{}
@@ -445,11 +446,11 @@ func (suite *ListSuite) TestBalancing() {
 	suite.Assert().Equal(xslices.ToSet([]string{"one", "two", "four"}), seen)
 
 	// Reconcile
-	l.Reconcile([]*customBackend{
+	l.Reconcile(slices.Values([]*customBackend{
 		bc.GetBackend("one"),
 		bc.SetBackend("five", 0, nil),
 		bc.SetBackend("six", 0, nil),
-	})
+	}))
 
 	// Should pick all three
 	seen = map[string]struct{}{}
@@ -467,11 +468,11 @@ func (suite *ListSuite) TestBalancing() {
 	waitForUpdate(suite.T(), bc.SetBackend("one", 2, nil), 1)
 
 	// Reconile
-	l.Reconcile([]*customBackend{
+	l.Reconcile(slices.Values([]*customBackend{
 		bc.GetBackend("one"),
 		bc.SetBackend("seven", 1, nil),
 		bc.SetBackend("eight", 1, nil),
-	})
+	}))
 
 	// Should pick seven or eight
 	seen = map[string]struct{}{}

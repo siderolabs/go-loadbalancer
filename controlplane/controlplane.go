@@ -8,6 +8,7 @@ package controlplane
 import (
 	"fmt"
 	"net"
+	"slices"
 	"strconv"
 	"time"
 
@@ -117,7 +118,7 @@ func (lb *LoadBalancer) Start(upstreamCh <-chan []string) error {
 		for {
 			select {
 			case upstreams := <-upstreamCh:
-				if err := lb.lb.ReconcileRoute(lb.endpoint, upstreams); err != nil {
+				if err := lb.lb.ReconcileRoute(lb.endpoint, slices.Values(upstreams)); err != nil {
 					lb.lb.Logger.Warn("failed reconciling list of upstreams",
 						zap.Strings("upstreams", upstreams),
 						zap.Error(err),
@@ -156,7 +157,7 @@ func findListenPort(address string) (int, error) {
 		return 0, err
 	}
 
-	port := l.Addr().(*net.TCPAddr).Port //nolint:forcetypeassert
+	port := l.Addr().(*net.TCPAddr).Port //nolint:errcheck,forcetypeassert
 
 	return port, l.Close()
 }
