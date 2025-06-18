@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"math/rand/v2"
 	"slices"
 	"sync"
 	"time"
@@ -94,6 +95,19 @@ func WithHealthcheckInterval(interval time.Duration) ListOption {
 	}
 }
 
+// WithHealthCheckJitter configures healthcheck jitter (0.0 - 1.0).
+func WithHealthCheckJitter(jitter float64) ListOption {
+	return func(l *ListConfig) error {
+		if jitter < 0 || jitter > 1 {
+			return fmt.Errorf("healthcheck jitter should in range [0, 1]: %f", jitter)
+		}
+
+		l.healthcheckJitter = jitter
+
+		return nil
+	}
+}
+
 // WithHealthcheckTimeout configures healthcheck timeout (for each backend).
 func WithHealthcheckTimeout(timeout time.Duration) ListOption {
 	return func(l *ListConfig) error {
@@ -159,6 +173,9 @@ type ListConfig struct { //nolint:govet
 	lowScore, highScore               float64
 	failScoreDelta, successScoreDelta float64
 	initialScore                      float64
+	healthcheckJitter                 float64
+
+	initialHealthcheckDoneCh chan struct{}
 
 	minTier, maxTier, initTier Tier
 }
@@ -191,6 +208,8 @@ func NewListWithCmp[T Backend](upstreams iter.Seq[T], cmp func(T, T) bool, optio
 			minTier:             0,
 			maxTier:             4,
 			initTier:            0,
+
+			initialHealthcheckDoneCh: make(chan struct{}),
 		},
 
 		cmp:     cmp,
@@ -321,6 +340,16 @@ func (list *List[T]) downWithTier(upstream T, newTier Tier) {
 	}
 }
 
+// WaitForInitialHealthcheck waits for initial healthcheck to be completed.
+func (list *List[T]) WaitForInitialHealthcheck(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-list.initialHealthcheckDoneCh:
+		return nil
+	}
+}
+
 // Pick returns next backend to be used.
 //
 // Default policy is to pick healthy (non-negative score) backend in
@@ -351,35 +380,54 @@ func (list *List[T]) Pick() (T, error) { //nolint:ireturn
 func (list *List[T]) healthcheck(ctx context.Context) {
 	defer list.healthWg.Done()
 
-	ticker := time.NewTicker(list.healthcheckInterval)
-	defer ticker.Stop()
+	// run the initial health check immediately
+	list.doHealthCheck(ctx)
+
+	close(list.initialHealthcheckDoneCh)
+
+	initialInterval := list.healthcheckInterval
+	if list.healthcheckJitter > 0 {
+		// jitter is enabled - stagger the second health check by setting the first wait time to a random duration between 0 and the full interval
+		initialInterval = time.Duration(rand.Float64() * float64(list.healthcheckInterval))
+	}
+
+	timer := time.NewTimer(initialInterval)
+	defer timer.Stop()
 
 	for {
-		list.mu.Lock()
-		backends := xslices.Map(list.nodes, func(n node[T]) T { return n.backend })
-		list.mu.Unlock()
-
-		for _, backend := range backends {
-			if ctx.Err() != nil {
-				return
-			}
-
-			func() {
-				localCtx, ctxCancel := context.WithTimeout(ctx, list.healthcheckTimeout)
-				defer ctxCancel()
-
-				if newTier, err := backend.HealthCheck(localCtx); err != nil {
-					list.downWithTier(backend, newTier)
-				} else {
-					list.upWithTier(backend, newTier)
-				}
-			}()
-		}
-
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-timer.C:
 		}
+
+		list.doHealthCheck(ctx)
+
+		nextInterval := time.Duration(((rand.Float64()*2-1)*list.healthcheckJitter + 1.0) * float64(list.healthcheckInterval))
+
+		timer.Reset(nextInterval)
+	}
+}
+
+func (list *List[T]) doHealthCheck(ctx context.Context) {
+	list.mu.Lock()
+	backends := xslices.Map(list.nodes, func(n node[T]) T { return n.backend })
+	list.mu.Unlock()
+
+	for _, backend := range backends {
+		if ctx.Err() != nil {
+			return
+		}
+
+		func() {
+			localCtx, ctxCancel := context.WithTimeout(ctx, list.healthcheckTimeout)
+			defer ctxCancel()
+
+			if newTier, err := backend.HealthCheck(localCtx); err != nil {
+				list.downWithTier(backend, newTier)
+			} else {
+				list.upWithTier(backend, newTier)
+			}
+		}()
 	}
 }

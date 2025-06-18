@@ -48,6 +48,11 @@ func (suite *ListSuite) TestEmpty() {
 
 	defer l.Shutdown()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	suite.Require().NoError(l.WaitForInitialHealthcheck(ctx), "initial healthcheck should be done immediately")
+
 	backend, err := l.Pick()
 	suite.Assert().Zero(backend)
 	suite.Assert().EqualError(err, "no upstreams available")
