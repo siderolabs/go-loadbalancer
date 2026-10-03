@@ -492,6 +492,69 @@ func (suite *ListSuite) TestBalancing() {
 	suite.Assert().Equal(xslices.ToSet([]string{"seven", "eight"}), seen)
 }
 
+func (suite *ListSuite) TestUnhealthyHealthcheckInterval() {
+	for _, tt := range []struct {
+		name      string
+		options   []upstream.ListOption
+		recovered bool
+	}{
+		{
+			name:      "regular interval only",
+			recovered: false,
+		},
+		{
+			name:      "short interval while no backend is usable",
+			options:   []upstream.ListOption{upstream.WithUnhealthyHealthcheckInterval(10 * time.Millisecond)},
+			recovered: true,
+		},
+	} {
+		suite.Run(tt.name, func() {
+			var bc backendControl
+
+			// The backend is down when the list starts (a control plane endpoint
+			// before its API server listens), so the first check makes it unusable.
+			l, err := upstream.NewListWithCmp(
+				slices.Values([]*customBackend{bc.SetBackend("apiserver", 0, errors.New("connection refused"))}),
+				func(a, b *customBackend) bool { return a.name == b.name },
+				append([]upstream.ListOption{
+					upstream.WithLowHighScores(-3, 3),
+					upstream.WithInitialScore(0),
+					upstream.WithScoreDeltas(-1, 1),
+					upstream.WithHealthcheckInterval(time.Hour),
+				}, tt.options...)...,
+			)
+			suite.Require().NoError(err)
+
+			defer l.Shutdown()
+
+			suite.Require().NoError(l.WaitForInitialHealthcheck(context.Background()))
+
+			_, err = l.Pick()
+			suite.Require().ErrorIs(err, upstream.ErrNoUpstreams)
+
+			// Traffic failing meanwhile drives the score to the floor.
+			for range 5 {
+				l.Down(bc.GetBackend("apiserver"))
+			}
+
+			// The backend comes up. Only another health check can make it usable.
+			bc.SetBackend("apiserver", 0, nil)
+
+			recovered := false
+
+			for deadline := time.Now().Add(500 * time.Millisecond); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+				if _, err = l.Pick(); err == nil {
+					recovered = true
+
+					break
+				}
+			}
+
+			suite.Assert().Equal(tt.recovered, recovered)
+		})
+	}
+}
+
 func waitForUpdate(t *testing.T, backend *customBackend, times int64) {
 	prev := backend.called.Load()
 

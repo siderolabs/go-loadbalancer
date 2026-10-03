@@ -95,6 +95,24 @@ func WithHealthcheckInterval(interval time.Duration) ListOption {
 	}
 }
 
+// WithUnhealthyHealthcheckInterval configures the healthcheck interval used while
+// no backend is usable (every score is below zero), instead of the regular interval.
+//
+// A route with no usable backend fails every connection, so checking it more often
+// costs little and lets it recover within a few checks once a backend comes back.
+// Zero (the default) keeps the regular interval.
+func WithUnhealthyHealthcheckInterval(interval time.Duration) ListOption {
+	return func(l *ListConfig) error {
+		if interval < 0 {
+			return fmt.Errorf("unhealthy healthcheck interval should not be negative: %s", interval)
+		}
+
+		l.unhealthyHealthcheckInterval = interval
+
+		return nil
+	}
+}
+
 // WithHealthCheckJitter configures healthcheck jitter (0.0 - 1.0).
 func WithHealthCheckJitter(jitter float64) ListOption {
 	return func(l *ListConfig) error {
@@ -164,8 +182,9 @@ type List[T Backend] struct { //nolint:govet
 // ListConfig is a configuration for List. It is separated from List to allow
 // usage of functional options without exposing type in their API.
 type ListConfig struct { //nolint:govet
-	healthcheckInterval time.Duration
-	healthcheckTimeout  time.Duration
+	healthcheckInterval          time.Duration
+	unhealthyHealthcheckInterval time.Duration
+	healthcheckTimeout           time.Duration
 
 	healthWg        sync.WaitGroup
 	healthCtxCancel context.CancelFunc
@@ -377,6 +396,19 @@ func (list *List[T]) Pick() (T, error) { //nolint:ireturn
 	return zero, ErrNoUpstreams
 }
 
+// unusable reports whether the short unhealthy interval applies: it is configured
+// and no backend has a score Pick would accept.
+func (list *List[T]) unusable() bool {
+	if list.unhealthyHealthcheckInterval == 0 {
+		return false
+	}
+
+	list.mu.Lock()
+	defer list.mu.Unlock()
+
+	return !slices.ContainsFunc(list.nodes, func(n node[T]) bool { return n.score >= 0 })
+}
+
 func (list *List[T]) healthcheck(ctx context.Context) {
 	defer list.healthWg.Done()
 
@@ -389,6 +421,10 @@ func (list *List[T]) healthcheck(ctx context.Context) {
 	if list.healthcheckJitter > 0 {
 		// jitter is enabled - stagger the second health check by setting the first wait time to a random duration between 0 and the full interval
 		initialInterval = time.Duration(rand.Float64() * float64(list.healthcheckInterval))
+	}
+
+	if list.unusable() {
+		initialInterval = list.unhealthyHealthcheckInterval
 	}
 
 	timer := time.NewTimer(initialInterval)
@@ -404,6 +440,10 @@ func (list *List[T]) healthcheck(ctx context.Context) {
 		list.doHealthCheck(ctx)
 
 		nextInterval := time.Duration(((rand.Float64()*2-1)*list.healthcheckJitter + 1.0) * float64(list.healthcheckInterval))
+
+		if list.unusable() {
+			nextInterval = list.unhealthyHealthcheckInterval
+		}
 
 		timer.Reset(nextInterval)
 	}
