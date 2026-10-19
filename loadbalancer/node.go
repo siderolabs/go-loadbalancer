@@ -6,6 +6,7 @@ package loadbalancer
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"go.uber.org/zap"
@@ -54,8 +55,8 @@ func calcTier(err error, elapsed time.Duration) (upstream.Tier, error) {
 		return -1, err
 	}
 
-	for i := len(mins) - 1; i >= 0; i-- {
-		if elapsed >= mins[i] {
+	for i, min := range slices.Backward(mins) {
+		if elapsed >= min {
 			return upstream.Tier(i), nil
 		}
 	}

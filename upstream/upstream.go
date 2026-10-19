@@ -95,6 +95,27 @@ func WithHealthcheckInterval(interval time.Duration) ListOption {
 	}
 }
 
+// WithUnhealthyHealthcheckInterval configures the healthcheck interval used while the list has no usable backends.
+//
+// When no backend has a non-negative score, every Pick fails, so there is no point in waiting for
+// the regular healthcheck interval to detect recovery: health checks run at this (shorter) interval
+// instead. Additionally, a Down call which leaves the list without usable backends triggers a
+// health check immediately (rate-limited to this interval), so a list doesn't stay unusable for
+// the regular interval after traffic failures.
+//
+// Jitter is not applied to this interval. Zero (the default) disables this behavior.
+func WithUnhealthyHealthcheckInterval(interval time.Duration) ListOption {
+	return func(l *ListConfig) error {
+		if interval < 0 {
+			return fmt.Errorf("unhealthy healthcheck interval should be non-negative: %s", interval)
+		}
+
+		l.unhealthyHealthcheckInterval = interval
+
+		return nil
+	}
+}
+
 // WithHealthCheckJitter configures healthcheck jitter (0.0 - 1.0).
 func WithHealthCheckJitter(jitter float64) ListOption {
 	return func(l *ListConfig) error {
@@ -150,6 +171,8 @@ func WithTiers(minTier, maxTier, initTier Tier) ListOption {
 // by fail delta score, and every successful check updates score by success score delta (defaults are -1/+1).
 //
 // Backend might be used if its score is not negative.
+//
+// While no backend is usable, health checks might run more often (see WithUnhealthyHealthcheckInterval).
 type List[T Backend] struct { //nolint:govet
 	listConfig
 
@@ -164,11 +187,13 @@ type List[T Backend] struct { //nolint:govet
 // ListConfig is a configuration for List. It is separated from List to allow
 // usage of functional options without exposing type in their API.
 type ListConfig struct { //nolint:govet
-	healthcheckInterval time.Duration
-	healthcheckTimeout  time.Duration
+	healthcheckInterval          time.Duration
+	unhealthyHealthcheckInterval time.Duration
+	healthcheckTimeout           time.Duration
 
 	healthWg        sync.WaitGroup
 	healthCtxCancel context.CancelFunc
+	healthWakeupCh  chan struct{}
 
 	lowScore, highScore               float64
 	failScoreDelta, successScoreDelta float64
@@ -210,6 +235,7 @@ func NewListWithCmp[T Backend](upstreams iter.Seq[T], cmp func(T, T) bool, optio
 			initTier:            0,
 
 			initialHealthcheckDoneCh: make(chan struct{}),
+			healthWakeupCh:           make(chan struct{}, 1),
 		},
 
 		cmp:     cmp,
@@ -320,8 +346,30 @@ func (list *List[T]) updateNodeTier(i int, newTier Tier) {
 }
 
 // Down decreases backend score by fail score delta.
+//
+// If the list is left without usable backends, a health check is requested (see WithUnhealthyHealthcheckInterval).
 func (list *List[T]) Down(upstream T) {
 	list.downWithTier(upstream, -1)
+
+	if list.unhealthyHealthcheckInterval > 0 && !list.usable() {
+		list.wakeupHealthcheck()
+	}
+}
+
+// usable returns true if at least one backend has a non-negative score.
+func (list *List[T]) usable() bool {
+	list.mu.Lock()
+	defer list.mu.Unlock()
+
+	return len(list.nodes) > 0 && slices.ContainsFunc(list.nodes, func(n node[T]) bool { return n.score >= 0 })
+}
+
+// wakeupHealthcheck requests an out-of-schedule health check (non-blocking).
+func (list *List[T]) wakeupHealthcheck() {
+	select {
+	case list.healthWakeupCh <- struct{}{}:
+	default:
+	}
 }
 
 func (list *List[T]) downWithTier(upstream T, newTier Tier) {
@@ -383,15 +431,13 @@ func (list *List[T]) healthcheck(ctx context.Context) {
 	// run the initial health check immediately
 	list.doHealthCheck(ctx)
 
+	lastCheck := time.Now()
+
 	close(list.initialHealthcheckDoneCh)
 
-	initialInterval := list.healthcheckInterval
-	if list.healthcheckJitter > 0 {
-		// jitter is enabled - stagger the second health check by setting the first wait time to a random duration between 0 and the full interval
-		initialInterval = time.Duration(rand.Float64() * float64(list.healthcheckInterval))
-	}
+	nextCheck := lastCheck.Add(list.nextInterval(true))
 
-	timer := time.NewTimer(initialInterval)
+	timer := time.NewTimer(time.Until(nextCheck))
 	defer timer.Stop()
 
 	for {
@@ -399,13 +445,41 @@ func (list *List[T]) healthcheck(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
+		case <-list.healthWakeupCh:
+			// health check requested out of schedule (the list has no usable backends),
+			// run it as soon as the unhealthy interval since the last check allows
+			if wantCheck := lastCheck.Add(list.unhealthyHealthcheckInterval); wantCheck.Before(nextCheck) {
+				nextCheck = wantCheck
+
+				timer.Reset(time.Until(nextCheck))
+			}
+
+			continue
 		}
 
 		list.doHealthCheck(ctx)
 
-		nextInterval := time.Duration(((rand.Float64()*2-1)*list.healthcheckJitter + 1.0) * float64(list.healthcheckInterval))
+		lastCheck = time.Now()
+		nextCheck = lastCheck.Add(list.nextInterval(false))
 
-		timer.Reset(nextInterval)
+		timer.Reset(time.Until(nextCheck))
+	}
+}
+
+// nextInterval returns the interval to wait before the next health check.
+func (list *List[T]) nextInterval(initial bool) time.Duration {
+	if list.unhealthyHealthcheckInterval > 0 && !list.usable() {
+		return min(list.unhealthyHealthcheckInterval, list.healthcheckInterval)
+	}
+
+	switch {
+	case initial && list.healthcheckJitter > 0:
+		// jitter is enabled - stagger the second health check by setting the first wait time to a random duration between 0 and the full interval
+		return time.Duration(rand.Float64() * float64(list.healthcheckInterval))
+	case initial:
+		return list.healthcheckInterval
+	default:
+		return time.Duration(((rand.Float64()*2-1)*list.healthcheckJitter + 1.0) * float64(list.healthcheckInterval))
 	}
 }
 

@@ -492,6 +492,98 @@ func (suite *ListSuite) TestBalancing() {
 	suite.Assert().Equal(xslices.ToSet([]string{"seven", "eight"}), seen)
 }
 
+func (suite *ListSuite) TestUnhealthyRecovery() {
+	for _, tt := range []struct {
+		name      string
+		options   []upstream.ListOption
+		recovered bool
+	}{
+		{
+			name:      "regular interval only",
+			recovered: false,
+		},
+		{
+			name:      "unhealthy interval",
+			options:   []upstream.ListOption{upstream.WithUnhealthyHealthcheckInterval(10 * time.Millisecond)},
+			recovered: true,
+		},
+	} {
+		suite.Run(tt.name, func() {
+			var bc backendControl
+
+			l, err := upstream.NewListWithCmp(
+				slices.Values([]*customBackend{bc.SetBackend("one", 0, nil)}),
+				func(a, b *customBackend) bool { return a.name == b.name },
+				append([]upstream.ListOption{
+					upstream.WithLowHighScores(-3, 3),
+					upstream.WithInitialScore(1),
+					upstream.WithScoreDeltas(-1, 1),
+					upstream.WithHealthcheckInterval(time.Hour),
+				}, tt.options...)...,
+			)
+			suite.Require().NoError(err)
+
+			defer l.Shutdown()
+
+			suite.Require().NoError(l.WaitForInitialHealthcheck(context.Background()))
+
+			backend := bc.GetBackend("one")
+			suite.Require().EqualValues(1, backend.called.Load())
+
+			// the backend is healthy (score == 2), the next scheduled health check is in an hour
+			_, err = l.Pick()
+			suite.Require().NoError(err)
+
+			// the backend goes down, traffic failures drive the score below zero
+			bc.SetBackend("one", 0, errors.New("fail"))
+
+			for range 3 {
+				l.Down(backend) // score == -1
+			}
+
+			_, err = l.Pick()
+			suite.Require().ErrorIs(err, upstream.ErrNoUpstreams)
+
+			// let the health checks run for a while, if any
+			time.Sleep(100 * time.Millisecond)
+
+			checks := backend.called.Load()
+
+			if tt.recovered {
+				// out-of-schedule health checks should be running, rate-limited to the unhealthy interval
+				suite.Assert().GreaterOrEqual(checks, int64(3))
+				suite.Assert().LessOrEqual(checks, int64(15))
+			} else {
+				suite.Assert().EqualValues(1, checks)
+			}
+
+			// the backend comes back
+			bc.SetBackend("one", 0, nil)
+
+			recovered := false
+
+			for deadline := time.Now().Add(500 * time.Millisecond); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+				if _, err = l.Pick(); err == nil {
+					recovered = true
+
+					break
+				}
+			}
+
+			suite.Assert().Equal(tt.recovered, recovered)
+
+			if tt.recovered {
+				// once recovered, health checks should be back to the regular schedule
+				checks = backend.called.Load()
+
+				time.Sleep(100 * time.Millisecond)
+
+				suite.Assert().Equal(checks, backend.called.Load())
+			}
+		})
+	}
+}
+
 func waitForUpdate(t *testing.T, backend *customBackend, times int64) {
 	prev := backend.called.Load()
 

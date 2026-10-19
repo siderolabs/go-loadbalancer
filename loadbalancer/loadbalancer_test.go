@@ -277,6 +277,83 @@ func (suite *TCPSuite) TestBalancer() {
 	}
 }
 
+func (suite *TCPSuite) TestScoreOnDial() {
+	var upstream1 mockUpstream
+
+	upstream1.identity = "one"
+	suite.Require().NoError(upstream1.Start())
+
+	listenAddr, err := findListenAddress()
+	suite.Require().NoError(err)
+
+	lb := &loadbalancer.TCP{Logger: zaptest.NewLogger(suite.T())}
+	suite.Require().NoError(lb.AddRoute(
+		listenAddr,
+		slices.Values([]string{upstream1.addr}),
+		upstream.WithLowHighScores(-3, 3),
+		upstream.WithInitialScore(0),
+		upstream.WithScoreDeltas(-1, 1),
+		upstream.WithHealthcheckInterval(time.Hour), // only the initial health check runs
+		upstream.WithHealthcheckTimeout(100*time.Millisecond),
+		upstream.WithTiers(0, 0, 0),
+	))
+
+	suite.Require().NoError(lb.Start())
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+
+		lb.Wait() //nolint: errcheck
+	}()
+
+	// initial health check: score == 1, successful proxied connections don't affect the score
+	for range 5 {
+		c, err := net.Dial("tcp", listenAddr)
+		suite.Require().NoError(err)
+
+		id, err := io.ReadAll(c)
+		suite.Require().NoError(err)
+		suite.Assert().Equal([]byte("one"), id)
+
+		suite.Require().NoError(c.Close())
+	}
+
+	// bring down the upstream: each failed dial lowers the score by one, so it takes
+	// exactly 2 failed connections (1 -> -1) for the route to become unhealthy
+	upstream1.Close()
+
+	failedRequests := 0
+
+	for {
+		healthy, err := lb.IsRouteHealthy(listenAddr)
+		suite.Require().NoError(err)
+
+		if !healthy {
+			break
+		}
+
+		c, err := net.Dial("tcp", listenAddr)
+		suite.Require().NoError(err)
+
+		id, err := io.ReadAll(c)
+		suite.Require().NoError(err)
+		suite.Assert().Empty(id)
+
+		suite.Require().NoError(c.Close())
+
+		failedRequests++
+	}
+
+	suite.Assert().Equal(2, failedRequests)
+
+	suite.Require().NoError(lb.Close())
+	wg.Wait()
+}
+
 func TestTCPSuite(t *testing.T) {
 	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
 

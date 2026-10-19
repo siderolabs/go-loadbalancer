@@ -52,6 +52,15 @@ func (target *lbTarget) HandleConn(conn net.Conn) {
 	upstreamTarget.KeepAlivePeriod = target.keepAlivePeriod
 	upstreamTarget.TCPUserTimeout = target.tcpUserTimeout
 	upstreamTarget.OnDialError = func(src net.Conn, dstDialErr error) {
+		target.logger.Warn(
+			"error dialing upstream",
+			zap.String("upstream_addr", upstreamBackend.address),
+			zap.Error(dstDialErr),
+		)
+
+		// update the score before closing the client connection, so that the client observes consistent state
+		target.list.Down(upstreamBackend)
+
 		if err := src.Close(); err != nil {
 			target.logger.Warn(
 				"error closing connection",
@@ -59,14 +68,6 @@ func (target *lbTarget) HandleConn(conn net.Conn) {
 				zap.Error(err),
 			)
 		}
-
-		target.logger.Warn(
-			"error dialing upstream",
-			zap.String("upstream_addr", upstreamBackend.address),
-			zap.Error(dstDialErr),
-		)
-
-		target.list.Down(upstreamBackend)
 	}
 
 	upstreamTarget.HandleConn(conn)
