@@ -6,6 +6,7 @@
 package controlplane
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"slices"
@@ -152,7 +153,7 @@ func (lb *LoadBalancer) Shutdown() error {
 }
 
 func findListenPort(address string) (int, error) {
-	l, err := net.Listen("tcp", net.JoinHostPort(address, "0"))
+	l, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", net.JoinHostPort(address, "0"))
 	if err != nil {
 		return 0, err
 	}

@@ -365,7 +365,7 @@ func (suite *ListSuite) TestBalancing() {
 	suite.Assert().Equal(xslices.ToSet([]string{"two", "three"}), seen)
 
 	// Move three to zero tier
-	waitForUpdate(suite.T(), bc.SetBackend("three", 0, nil), 0)
+	waitForUpdate(suite.T(), bc.SetBackend("three", 0, nil), 1)
 
 	// Should always pick three
 	for range 100 {

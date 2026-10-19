@@ -35,7 +35,7 @@ type mockUpstream struct {
 func (u *mockUpstream) Start() error {
 	var err error
 
-	u.l, err = net.Listen("tcp", "localhost:0")
+	u.l, err = (&net.ListenConfig{}).Listen(u.T.Context(), "tcp", "localhost:0")
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func TestLoadBalancer(t *testing.T) {
 	upstreamCh <- upstreamAddrs[:pivot]
 
 	readIdentity := func() (int, error) {
-		c, err := net.Dial("tcp", lb.Endpoint())
+		c, err := (&net.Dialer{}).DialContext(t.Context(), "tcp", lb.Endpoint())
 		if err != nil {
 			return 0, retry.ExpectedError(err)
 		}

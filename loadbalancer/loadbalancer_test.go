@@ -5,6 +5,7 @@
 package loadbalancer_test
 
 import (
+	"context"
 	"io"
 	"net"
 	"slices"
@@ -31,7 +32,7 @@ type mockUpstream struct {
 func (u *mockUpstream) Start() error {
 	var err error
 
-	u.l, err = net.Listen("tcp", "localhost:0")
+	u.l, err = (&net.ListenConfig{}).Listen(context.Background(), "tcp", "localhost:0")
 	if err != nil {
 		return err
 	}
@@ -111,16 +112,12 @@ func (suite *TCPSuite) TestReconcile() {
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		lb.Wait() //nolint: errcheck
-	}()
+	})
 
 	for i := range 5 * pivot {
-		c, err := net.Dial("tcp", listenAddr)
+		c, err := (&net.Dialer{}).DialContext(suite.T().Context(), "tcp", listenAddr)
 		suite.Require().NoError(err)
 
 		id, err := io.ReadAll(c)
@@ -143,7 +140,7 @@ func (suite *TCPSuite) TestReconcile() {
 	upstreamsUsed := map[int64]int{}
 
 	for i := range 10 * (upstreamCount - pivot) {
-		c, err := net.Dial("tcp", listenAddr)
+		c, err := (&net.Dialer{}).DialContext(suite.T().Context(), "tcp", listenAddr)
 		suite.Require().NoError(err)
 
 		id, err := io.ReadAll(c)
@@ -211,16 +208,12 @@ func (suite *TCPSuite) TestBalancer() {
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		lb.Wait() //nolint: errcheck
-	}()
+	})
 
 	for i := range 2 * upstreamCount {
-		c, err := net.Dial("tcp", listenAddr)
+		c, err := (&net.Dialer{}).DialContext(suite.T().Context(), "tcp", listenAddr)
 		suite.Require().NoError(err)
 
 		id, err := io.ReadAll(c)
@@ -239,7 +232,7 @@ func (suite *TCPSuite) TestBalancer() {
 	failedRequests := 0
 
 	for range 10 * upstreamCount {
-		c, err := net.Dial("tcp", listenAddr)
+		c, err := (&net.Dialer{}).DialContext(suite.T().Context(), "tcp", listenAddr)
 		suite.Require().NoError(err)
 
 		id, err := io.ReadAll(c)
@@ -302,17 +295,13 @@ func (suite *TCPSuite) TestScoreOnDial() {
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		lb.Wait() //nolint: errcheck
-	}()
+	})
 
 	// initial health check: score == 1, successful proxied connections don't affect the score
 	for range 5 {
-		c, err := net.Dial("tcp", listenAddr)
+		c, err := (&net.Dialer{}).DialContext(suite.T().Context(), "tcp", listenAddr)
 		suite.Require().NoError(err)
 
 		id, err := io.ReadAll(c)
@@ -336,7 +325,7 @@ func (suite *TCPSuite) TestScoreOnDial() {
 			break
 		}
 
-		c, err := net.Dial("tcp", listenAddr)
+		c, err := (&net.Dialer{}).DialContext(suite.T().Context(), "tcp", listenAddr)
 		suite.Require().NoError(err)
 
 		id, err := io.ReadAll(c)
