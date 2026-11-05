@@ -60,6 +60,30 @@ func WithHealthCheckOptions(options ...upstream.ListOption) LoadBalancerOption {
 	}
 }
 
+// WithHealthCheck overrides the default upstream health check (TCP dial attempt).
+//
+// The default health check timeout (100ms) and tier thresholds are tuned for a TCP dial attempt,
+// so a heavier health check (e.g. an HTTPS request) should come with a matching timeout
+// (WithHealthCheckOptions(upstream.WithHealthcheckTimeout(...))), otherwise every upstream might be marked as unhealthy,
+// and matching tier thresholds (see [WithTierThresholds]).
+//
+// The health check is used for background upstream health checks only: a failure to connect
+// to the upstream while proxying a connection always lowers the upstream score.
+func WithHealthCheck(healthCheck loadbalancer.HealthCheckFunc) LoadBalancerOption {
+	return func(lb *LoadBalancer) {
+		lb.lb.HealthCheck = healthCheck
+	}
+}
+
+// WithTierThresholds overrides the health check latency thresholds used to calculate upstream tiers.
+//
+// See [loadbalancer.TCP.TierThresholds] for details.
+func WithTierThresholds(thresholds ...time.Duration) LoadBalancerOption {
+	return func(lb *LoadBalancer) {
+		lb.lb.TierThresholds = thresholds
+	}
+}
+
 // NewLoadBalancer initializes the load balancer.
 //
 // If bindPort is zero, load balancer will bind to a random available port.

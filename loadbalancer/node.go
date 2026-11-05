@@ -6,6 +6,7 @@ package loadbalancer
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"time"
 
@@ -14,33 +15,51 @@ import (
 	"github.com/siderolabs/go-loadbalancer/upstream"
 )
 
-type node struct {
-	logger  *zap.Logger
-	address string // host:port
-}
+// HealthCheckFunc checks the health of the upstream at the given address (host:port).
+//
+// The context passed to the function carries the health check timeout (see [upstream.WithHealthcheckTimeout]),
+// and it is canceled when the load balancer is closed, so the function should return promptly once the context is done.
+// The function should release all resources it acquired (connections, goroutines) before it returns.
+//
+// A nil error marks the upstream as healthy, the time taken by the function is used to calculate the upstream tier.
+// The default tier thresholds are tuned for a TCP dial attempt, and the default health check timeout is 100ms,
+// so a heavier health check should come with a longer timeout and matching tier thresholds (see [TCP.TierThresholds]).
+//
+// Each route runs health checks of its upstreams sequentially in its own goroutine, and the same function
+// is shared by all routes of the [TCP] load balancer, so the function must be safe for concurrent use.
+type HealthCheckFunc func(ctx context.Context, address string) error
 
-func (upstream node) HealthCheck(ctx context.Context) (upstream.Tier, error) {
-	start := time.Now()
-	err := upstream.healthCheck(ctx)
-	elapsed := time.Since(start)
-
-	return calcTier(err, elapsed)
-}
-
-func (upstream node) healthCheck(ctx context.Context) error {
-	d := probeDialer()
-
-	c, err := d.DialContext(ctx, "tcp", upstream.address)
+// DialHealthCheck is the default health check: a TCP connection attempt to the upstream.
+func DialHealthCheck(ctx context.Context, address string) error {
+	c, err := probeDialer().DialContext(ctx, "tcp", address)
 	if err != nil {
-		upstream.logger.Warn("healthcheck failed", zap.String("address", upstream.address), zap.Error(err))
-
 		return err
 	}
 
 	return c.Close()
 }
 
-var mins = []time.Duration{
+type node struct {
+	logger         *zap.Logger
+	healthCheck    HealthCheckFunc
+	address        string // host:port
+	tierThresholds []time.Duration
+}
+
+func (upstream node) HealthCheck(ctx context.Context) (upstream.Tier, error) {
+	start := time.Now()
+	err := upstream.healthCheck(ctx, upstream.address)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		upstream.logger.Warn("healthcheck failed", zap.String("address", upstream.address), zap.Error(err))
+	}
+
+	return calcTier(upstream.tierThresholds, err, elapsed)
+}
+
+// defaultTierThresholds are tuned for a TCP dial attempt.
+var defaultTierThresholds = []time.Duration{
 	0,
 	time.Millisecond / 10,
 	time.Millisecond,
@@ -49,18 +68,35 @@ var mins = []time.Duration{
 	1 * time.Second,
 }
 
-func calcTier(err error, elapsed time.Duration) (upstream.Tier, error) {
+// maxTierThresholds is limited by the max tier supported by [upstream.WithTiers].
+const maxTierThresholds = 11
+
+func validateTierThresholds(thresholds []time.Duration) error {
+	if len(thresholds) == 0 || len(thresholds) > maxTierThresholds {
+		return fmt.Errorf("number of tier thresholds should be between 1 and %d, got %d", maxTierThresholds, len(thresholds))
+	}
+
+	for i := 1; i < len(thresholds); i++ {
+		if thresholds[i] <= thresholds[i-1] {
+			return fmt.Errorf("tier thresholds should be strictly increasing, got %s after %s", thresholds[i], thresholds[i-1])
+		}
+	}
+
+	return nil
+}
+
+func calcTier(thresholds []time.Duration, err error, elapsed time.Duration) (upstream.Tier, error) {
 	if err != nil {
 		// preserve old tier
 		return -1, err
 	}
 
-	for i, min := range slices.Backward(mins) {
-		if elapsed >= min {
+	for i, threshold := range slices.Backward(thresholds) {
+		if elapsed >= threshold {
 			return upstream.Tier(i), nil
 		}
 	}
 
-	// We should never get here, but there is no way to tell this to Go compiler.
-	return upstream.Tier(len(mins)), err
+	// faster than the first threshold
+	return 0, nil
 }

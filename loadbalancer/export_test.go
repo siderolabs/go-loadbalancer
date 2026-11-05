@@ -10,4 +10,8 @@ import (
 	"github.com/siderolabs/go-loadbalancer/upstream"
 )
 
-func CalcTier(err error, elapsed time.Duration) (upstream.Tier, error) { return calcTier(err, elapsed) }
+var DefaultTierThresholds = defaultTierThresholds
+
+func CalcTier(thresholds []time.Duration, err error, elapsed time.Duration) (upstream.Tier, error) {
+	return calcTier(thresholds, err, elapsed)
+}
